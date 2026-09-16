@@ -33,14 +33,16 @@ ao lado do `GreetService` já existente — o import usado em `main.ts` seguiu o
 mesmo padrão já presente no scaffold: `import {GreetService, CounterService} from "../bindings/changeme"`.
 
 **Estado compartilhado entre janelas:** **sim** — confirmado com evidência real,
-não apenas inspeção de código. Com `wails3 dev` rodando (duas janelas nativas,
-"Window 1" e "Window 2", abertas pelo mesmo processo `wails-poc.exe`), um script
-PowerShell usando Windows UI Automation (`System.Windows.Automation`, mesma
-técnica da Task 2) invocou o botão real "incrementar" (via `InvokePattern.Invoke()`)
-e leu o valor real exibido (nó `ControlType.Text` cujo `Name` é o número do
-contador) dentro de cada janela:
+não apenas inspeção de código nem narrativa. Com `wails3 dev` rodando (duas
+janelas nativas, "Window 1" e "Window 2", abertas pelo mesmo processo
+`wails-poc.exe`), o script `spikes/04-multiwindow-verify.ps1` (comitado neste
+mesmo commit, reexecutável) usa Windows UI Automation
+(`System.Windows.Automation`, mesma técnica da Task 2) para invocar o botão
+real "incrementar" (via `InvokePattern.Invoke()`) e ler o valor real exibido
+(nó `ControlType.Text` cujo `Name` é o número do contador) dentro de cada
+janela:
 
-1. 3 cliques em "incrementar" na Window 1 → Window 1 passou a mostrar `3`.
+1. 3 cliques em "incrementar" na Window 1 → Window 1 passou de `0` para `3`.
 2. Antes de qualquer interação na Window 2, seu valor (herdado do carregamento
    inicial, antes dos cliques na Window 1) ainda mostrava `0` — esperado, já
    que não há push automático de evento, só `Get()` sob demanda.
@@ -50,22 +52,70 @@ contador) dentro de cada janela:
    duas janelas leem/escrevem o mesmo `CounterService` (mesmo processo Go,
    mesmo ponteiro protegido por mutex), e não instâncias isoladas por janela.
 
+Saída bruta real da execução (capturada com `Tee-Object` para
+`spikes/04-multiwindow-verify-output.txt`, também comitado; PID e valores são
+os efetivamente lidos da janela real, não recalculados):
+
+```
+=== Locating wails-poc.exe process ===
+PID (before): 24872
+Windows seen so far: Window 2, Window 1
+Found both windows.
+
+=== Step A: initial values (before any click) ===
+Window 1 numeric text nodes (initial): 0
+Window 2 numeric text nodes (initial): 0
+
+=== Step B: click 'incrementar' 3x in Window 1 ===
+Window 1 numeric text nodes after 3 clicks: 3
+Delta (Window 1, 3 clicks): 0 -> 3 (diff=3, expected diff=3)
+
+=== Step C: read Window 2 BEFORE it does anything (should still show its stale initial value) ===
+Window 2 numeric text nodes (stale, pre-refresh): 0
+
+=== Step D: click 'incrementar' once in Window 2 (calls Increment()+Get() against the SAME backend) ===
+Window 2 numeric text nodes after its own click: 4
+EXPECTATION if state is shared: Window 2 shows 4 (Window 1's value 3 + Window 2's own +1 click), NOT 1 (which is what an ISOLATED counter starting from Window 2's own stale value 0 + 1 would show).
+
+=== Step E: close Window 2 via WindowPattern.Close() (equivalent to OS close button) ===
+
+=== Step F: verify process still alive and Window 1 still functional ===
+Process wails-poc.exe STILL RUNNING. PID (after)=24872 HasExited=False
+Remaining top-level windows: Window 1
+Window 1 numeric text nodes after closing Window 2 + one more click: 5
+EXPECTATION: 5 (Window 2's last value 4 + 1), proving Window 1's backend/state survived Window 2's close.
+
+=== Step G: regression check - Task 2's custom /page/ route still works in Window 1 ===
+REGRESSION OK: found text node 'spike ok: /page/test-123'
+
+=== DONE ===
+```
+
 **Fechar uma janela mata o processo?** **não**. Fechei a Window 2 via
 `WindowPattern.Close()` na árvore de UI Automation (equivalente programático ao
 botão de fechar do SO — aciona o mesmo caminho de fechamento nativo da janela,
-não um `kill` de processo). Depois disso:
+não um `kill` de processo). Depois disso (ver saída bruta acima, seção "Step F"):
 
-- `Get-Process wails-poc` continuou retornando o mesmo PID, com `HasExited = False`
-  — o processo `wails-poc.exe` seguiu rodando.
+- `Get-Process wails-poc` continuou retornando o **mesmo PID** (`24872` antes e
+  depois), com `HasExited = False` — o processo `wails-poc.exe` seguiu
+  rodando, não reiniciou.
 - A Window 1 permaneceu presente e funcional: um clique adicional em
-  "incrementar" nela fez o contador ir para `5` (= 4 + 1), confirmando que o
+  "incrementar" nela fez o contador ir de `4` para `5`, confirmando que o
   `CounterService` compartilhado sobreviveu ao fechamento da Window 2 e que a
   Window 1 continuou operando normalmente (backend + IPC intactos).
 
 **Regressão (Task 2):** o link "testar rota custom" (rota HTTP custom `/page/`
 do spike da Task 2) continuou funcionando na Window 1 após todas as mudanças
 desta task — clicado via UI Automation, renderizou `spike ok: /page/test-123`
-como antes.
+como antes (ver "Step G" na saída bruta acima).
+
+**Artefatos de verificação (auditáveis, comitados neste commit):**
+
+- `spikes/04-multiwindow-verify.ps1` — script PowerShell completo usado para
+  rodar as etapas acima (reexecutável: instruções de como rodar estão no
+  cabeçalho do próprio arquivo).
+- `spikes/04-multiwindow-verify-output.txt` — saída bruta real e completa da
+  execução citada acima (idêntica ao bloco colado neste arquivo).
 
 **Decisão:** **GO** — Wails v3 (beta.23) suporta criar múltiplas janelas no
 mesmo processo, todas compartilhando o mesmo backend Go (mesmos services,
