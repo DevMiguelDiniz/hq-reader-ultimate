@@ -1,0 +1,14 @@
+﻿=== Launching PRODUCTION binary: H:\hq-reader-ultimate\.claude\worktrees\etapa-0-spikes\spikes\wails-poc\bin\wails-poc.exe ===
+PID: 22476
+Found window: Window 1
+
+=== Locating 'testar rota custom' link ===
+Link found. Invoking via InvokePattern (production embedded-assets path, no Vite dev server involved).
+
+=== Reading rendered text after navigation ===
+PRODUCTION ROUTE OK: found text node 'spike ok: /page/test-123'
+
+=== Cleanup ===
+Killed PID 22476.
+
+=== DONE ===

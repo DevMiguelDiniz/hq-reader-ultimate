@@ -43,7 +43,7 @@ termina consolidando os 5 achados numa decisão go/no-go única.
 - Produces: um app Wails v3 rodável em `spikes/wails-poc/` que as Tasks 2 e 4
   vão modificar.
 
-- [ ] **Step 1: Confirmar toolchain**
+- [x] **Step 1: Confirmar toolchain**
 
 Rodar:
 ```bash
@@ -51,7 +51,7 @@ go version
 ```
 Esperado: versão 1.21 ou superior. Se for menor, atualizar o Go antes de continuar.
 
-- [ ] **Step 2: Instalar a CLI do Wails v3**
+- [x] **Step 2: Instalar a CLI do Wails v3**
 
 ```bash
 go install github.com/wailsapp/wails/v3/cmd/wails3@latest
@@ -59,7 +59,7 @@ wails3 version
 ```
 Anotar a versão exata impressa — ela é a versão "pinada" para toda a Etapa 0.
 
-- [ ] **Step 3: Rodar o diagnóstico de dependências da plataforma**
+- [x] **Step 3: Rodar o diagnóstico de dependências da plataforma**
 
 ```bash
 wails3 doctor
@@ -68,7 +68,7 @@ Resolver qualquer dependência de sistema reportada como faltante (WebView2
 Runtime no Windows; `gtk3`/`webkitgtk` ou `libwebkitgtk-6.0` no Linux;
 Xcode command line tools no macOS). Não prosseguir com pendência vermelha.
 
-- [ ] **Step 4: Criar `spikes/README.md`**
+- [x] **Step 4: Criar `spikes/README.md`**
 
 ```markdown
 # spikes/
@@ -78,7 +78,7 @@ Código descartável usado para validar os riscos do §5 de
 produto. Nada aqui segue os padrões de qualidade do código de produção.
 ```
 
-- [ ] **Step 5: Gerar o app mínimo**
+- [x] **Step 5: Gerar o app mínimo**
 
 ```bash
 cd spikes
@@ -89,7 +89,7 @@ Se a flag `-t vanilla` não existir na versão instalada, rodar
 `wails3 init -help` para achar o nome atual do template mínimo (JS/HTML puro,
 sem framework de UI) e usar esse.
 
-- [ ] **Step 6: Confirmar que o template roda**
+- [x] **Step 6: Confirmar que o template roda**
 
 ```bash
 cd spikes/wails-poc
@@ -98,7 +98,7 @@ wails3 dev
 Esperado: uma janela nativa abre mostrando a página padrão do template. Parar
 o processo (Ctrl+C) depois de confirmar.
 
-- [ ] **Step 7: Atualizar `.gitignore` e commitar o scaffold**
+- [x] **Step 7: Atualizar `.gitignore` e commitar o scaffold**
 
 Adicionar ao `.gitignore` na raiz do repo:
 ```
@@ -129,7 +129,7 @@ git commit -m "spike: scaffold app Wails v3 minimo para etapa 0"
 - Produces: achado registrado em `spikes/01-http-route-finding.md`, usado na
   Task 7.
 
-- [ ] **Step 1: Verificar o formato de `application.Options` instalado**
+- [x] **Step 1: Verificar o formato de `application.Options` instalado**
 
 ```bash
 cd spikes/wails-poc
@@ -141,7 +141,7 @@ Conferir se existe um campo para plugar um `http.Handler` customizado (ex.:
 seguintes assumem `Assets.Handler`; se o nome for diferente, ajustar o código
 abaixo para o nome real.
 
-- [ ] **Step 2: Escrever o handler de teste e o mux combinado**
+- [x] **Step 2: Escrever o handler de teste e o mux combinado**
 
 Editar `spikes/wails-poc/main.go`:
 
@@ -190,7 +190,7 @@ Se `application.AssetFileServerFS` não existir com esse nome, rodar
 a função equivalente de servir o `embed.FS` do frontend — substituir a
 chamada mantendo o resto da estrutura.
 
-- [ ] **Step 3: Adicionar um link de teste na página inicial**
+- [x] **Step 3: Adicionar um link de teste na página inicial**
 
 No arquivo HTML gerado pelo Task 1 (dentro de `spikes/wails-poc/frontend/`),
 adicionar antes do fechamento de `</body>`:
@@ -199,7 +199,7 @@ adicionar antes do fechamento de `</body>`:
 <a id="spike-link" href="/page/test-123">testar rota custom</a>
 ```
 
-- [ ] **Step 4: Rodar e verificar manualmente**
+- [x] **Step 4: Rodar e verificar manualmente**
 
 ```bash
 wails3 dev
@@ -208,7 +208,7 @@ Clicar no link "testar rota custom" dentro da janela do app. Esperado: a
 página navega e mostra o texto puro `spike ok: /page/test-123` — não a SPA,
 não um 404.
 
-- [ ] **Step 5: Registrar o achado**
+- [x] **Step 5: Registrar o achado**
 
 Criar `spikes/01-http-route-finding.md`:
 
@@ -229,7 +229,7 @@ no Step 1>
 HTTP próprio em porta distinta, etc.>
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add spikes/wails-poc spikes/01-http-route-finding.md
@@ -249,7 +249,7 @@ git commit -m "spike: valida rota HTTP custom no AssetServer do Wails v3"
 - Consumes: nenhuma dependência das outras tasks.
 - Produces: achado registrado em `spikes/02-rar-cost-finding.md`.
 
-- [ ] **Step 1: Inicializar o módulo e a dependência**
+- [x] **Step 1: Inicializar o módulo e a dependência**
 
 ```bash
 mkdir -p spikes/rar-cost
@@ -258,7 +258,7 @@ go mod init hqreader/spikes/rarcost
 go get github.com/nwaples/rardecode/v2
 ```
 
-- [ ] **Step 2: Escrever o programa de medição**
+- [x] **Step 2: Escrever o programa de medição**
 
 Criar `spikes/rar-cost/main.go`:
 
@@ -321,7 +321,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 3: Rodar sem amostra pra confirmar o erro de uso**
+- [x] **Step 3: Rodar sem amostra pra confirmar o erro de uso**
 
 ```bash
 go run . 
@@ -330,7 +330,7 @@ Esperado: imprime `uso: rar-cost <arquivo.cbr>` e sai com código 1 (confirma
 que o binário compila e a validação de argumento funciona antes de testar com
 arquivo real).
 
-- [ ] **Step 4: Rodar contra uma amostra real de CBR sólido**
+- [x] **Step 4: Rodar contra uma amostra real de CBR sólido**
 
 Colocar um `.cbr` real conhecido como sólido (ex.: exportado do WinRAR com a
 opção "Solid archive" marcada, ou uma release de scan que tipicamente usa
@@ -347,7 +347,12 @@ Anotar a saída completa.
 Repetir o Step 4 com um `.cbr` comum (compressão não-sólida) em
 `testdata/sample-normal.cbr`. Anotar a saída.
 
-- [ ] **Step 6: Registrar o achado**
+(Não executado: não havia uma segunda amostra `.cbr` não-sólida disponível
+nesta rodada — ver `spikes/02-rar-cost-finding.md`, seção "Amostra não-sólida
+(comparação)". Deixado deliberadamente sem marcar, mesmo com a Task 3 concluída
+como um todo.)
+
+- [x] **Step 6: Registrar o achado**
 
 Criar `spikes/02-rar-cost-finding.md`:
 
@@ -368,7 +373,7 @@ Criar `spikes/02-rar-cost-finding.md`:
 livro na Etapa 3, definido como obrigatório se tempo total > X segundos>
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add spikes/rar-cost spikes/02-rar-cost-finding.md
@@ -502,7 +507,7 @@ git commit -m "spike: testa pan/zoom no WebKitGTK com imagem grande"
 - Consumes: o app gerado na Task 1.
 - Produces: achado registrado em `spikes/04-multiwindow-finding.md`.
 
-- [ ] **Step 1: Verificar a API de registro de serviços/bindings da versão instalada**
+- [x] **Step 1: Verificar a API de registro de serviços/bindings da versão instalada**
 
 ```bash
 cd spikes/wails-poc
@@ -513,7 +518,7 @@ Confirmar o nome do campo usado para expor um service ao frontend (ex.:
 vs. passar o valor direto). Ajustar o código do Step 2 para o nome real
 encontrado.
 
-- [ ] **Step 2: Implementar um service compartilhado simples**
+- [x] **Step 2: Implementar um service compartilhado simples**
 
 Editar `spikes/wails-poc/main.go`:
 
@@ -567,7 +572,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 3: Gerar os bindings e ligar a UI**
+- [x] **Step 3: Gerar os bindings e ligar a UI**
 
 Rodar `wails3 dev` uma vez para o Wails gerar os bindings TypeScript/JS do
 `CounterService` (tipicamente em `spikes/wails-poc/frontend/bindings/`).
@@ -598,21 +603,21 @@ aparecer no diretório de bindings, não adivinhar):
 </script>
 ```
 
-- [ ] **Step 4: Testar compartilhamento de estado entre janelas**
+- [x] **Step 4: Testar compartilhamento de estado entre janelas**
 
 Com `wails3 dev` rodando: clicar "incrementar" várias vezes na Janela 1.
 Trocar para a Janela 2, recarregar (ou clicar em algum botão que chame
 `Get()`) e confirmar que o valor mostrado é o mesmo contador, refletindo os
 cliques feitos na Janela 1.
 
-- [ ] **Step 5: Testar fechar uma janela sem matar o app**
+- [x] **Step 5: Testar fechar uma janela sem matar o app**
 
 Fechar a Janela 2 (botão de fechar do SO). Esperado: a Janela 1 continua
 funcional e o processo do app segue rodando (confirma que fechar uma janela
 não derruba o estado do backend nem o processo inteiro — pré-requisito para a
 Etapa 7 de destacar/reacoplar).
 
-- [ ] **Step 6: Registrar o achado**
+- [x] **Step 6: Registrar o achado**
 
 Criar `spikes/04-multiwindow-finding.md`:
 
@@ -632,7 +637,7 @@ observado>
 de estado compartilhado direto>
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add spikes/wails-poc spikes/04-multiwindow-finding.md
@@ -651,7 +656,7 @@ git commit -m "spike: valida estado compartilhado entre janelas no Wails v3"
   sem precisar das modificações das Tasks 2/4/5 — pode rodar a partir do
   estado deixado pela Task 1 sozinha, num checkout limpo se necessário).
 
-- [ ] **Step 1: Build com CGO desabilitado (Windows, PowerShell)**
+- [x] **Step 1: Build com CGO desabilitado (Windows, PowerShell)**
 
 ```powershell
 cd spikes/wails-poc
@@ -661,7 +666,7 @@ wails3 build
 Anotar se o build falha (e a mensagem de erro completa, se falhar) ou
 completa com sucesso.
 
-- [ ] **Step 2: Build com CGO habilitado, para comparação**
+- [x] **Step 2: Build com CGO habilitado, para comparação**
 
 ```powershell
 $env:CGO_ENABLED = "1"
@@ -670,7 +675,7 @@ wails3 build
 Confirmar que este completa (baseline de que o ambiente de build está
 corretamente configurado com um compilador C, ex. `gcc` via MSYS2/TDM-GCC).
 
-- [ ] **Step 3: Registrar o achado**
+- [x] **Step 3: Registrar o achado**
 
 Criar `spikes/05-windows-cgo-finding.md`:
 
@@ -690,7 +695,7 @@ exigência de toolchain C que não existiria de outra forma, e se isso muda a
 decisão do §4.1 do design.>
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add spikes/05-windows-cgo-finding.md
@@ -709,7 +714,7 @@ git commit -m "spike: confirma exigencia de CGO no build Windows do Wails v3"
 - Consumes: os 5 arquivos de achado criados nas Tasks 2-6.
 - Produces: `spikes/FINDINGS.md`, referenciado pelo spec atualizado.
 
-- [ ] **Step 1: Escrever o resumo consolidado**
+- [x] **Step 1: Escrever o resumo consolidado**
 
 Criar `spikes/FINDINGS.md` copiando a decisão (GO/NO-GO/GO COM MITIGAÇÃO) e a
 justificativa de cada um dos 5 arquivos de achado das Tasks 2-6, em uma
@@ -729,7 +734,7 @@ tabela única:
 Detalhes de cada spike: ver `spikes/0N-*-finding.md`.
 ```
 
-- [ ] **Step 2: Atualizar o spec com o resultado**
+- [x] **Step 2: Atualizar o spec com o resultado**
 
 Editar `docs/superpowers/specs/2026-09-16-hq-reader-design.md`, na seção §5,
 adicionando ao final da seção (sem apagar a lista original de riscos):
@@ -745,7 +750,7 @@ para o driver SQLite) registrando a mitigação decidida — não deixar a
 mitigação só no `FINDINGS.md`, o spec precisa refletir a arquitetura real que
 vai pra Etapa 1 em diante.
 
-- [ ] **Step 3: Commit final da Etapa 0**
+- [x] **Step 3: Commit final da Etapa 0**
 
 ```bash
 git add spikes/FINDINGS.md docs/superpowers/specs/2026-09-16-hq-reader-design.md

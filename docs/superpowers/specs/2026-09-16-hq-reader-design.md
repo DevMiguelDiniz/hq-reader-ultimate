@@ -15,11 +15,11 @@ Mobile fora de escopo.
 |---|---|
 | Framework desktop | Wails v3 (beta, pin em versão fixa, não `@latest`) |
 | ZIP (CBZ) | `archive/zip` (stdlib) |
-| RAR (CBR) | `nwaples/rardecode` (Go puro) |
+| RAR (CBR) | `nwaples/rardecode/v2` (v2.4.1, Go puro) |
 | Resize de thumbnail | `golang.org/x/image/draw` (CatmullRom) |
 | Metadados | `encoding/xml` (stdlib), `ComicInfo.xml` |
 | Ordenação natural | implementação própria ou `maruel/natural` |
-| Persistência | SQLite via `mattn/go-sqlite3` (CGO — já exigido pelo Wails no macOS/Linux; confirmar se Windows também exige antes da Etapa 4) |
+| Persistência | SQLite via `mattn/go-sqlite3` (CGO — já exigido pelo Wails no macOS/Linux; ver nota de risco em §4 sobre CGO no Windows) |
 | Frontend | Vite + React + TypeScript, Tailwind, shadcn/ui, Zustand, Motion |
 
 Go foi escolhido sobre Rust por causa do RAR: em Go, `rardecode` resolve CBR sem
@@ -95,15 +95,41 @@ Assimetria entre implementações:
   ~537ms para decodificação sequencial completa, mas se revelou **não-sólida**
   (`hdr.Solid == false` em todas as entradas) — o pior caso de RAR
   genuinamente sólido não foi medido diretamente. Extrapolação linear pelo
-  throughput observado (~57 MiB/s) sugere ~1.7s para 100 MiB e ~3.5s para
+  throughput observado (~53.6 MiB/s) sugere ~1.87s para 100 MiB e ~3.73s para
   200 MiB, faixa em que travar a UI sem feedback já é perceptível ao usuário.
   Mitigação decidida: exibir indicador de progresso ("carregando página X de
-  N") sempre que `hdr.Solid == true` na primeira entrada decodificada **e** o
-  tempo estimado de decodificação total ultrapassar um limiar inicial de
-  300–500ms (ajustável). CBZ e RAR não-sólido mantêm acesso direto sem
-  spinner, já que ambos suportam acesso aleatório por entrada. Lacuna a
-  fechar antes de finalizar o limiar: validar com uma amostra CBR
-  genuinamente sólida e grande (100+ MiB) quando uma estiver disponível.
+  N") sempre que `hdr.Solid == true` na primeira entrada decodificada **após
+  a primeira** (isto é, a partir da segunda entrada em diante — em RAR
+  sólido, a própria primeira entrada nunca vem marcada `Solid`, já que
+  `Solid` sinaliza que aquela entrada continua o stream de descompressão da
+  entrada anterior) **e** o tempo estimado de decodificação total ultrapassar
+  um limiar inicial de 300–500ms (ajustável). CBZ e RAR não-sólido mantêm
+  acesso direto sem spinner, já que ambos suportam acesso aleatório por
+  entrada. Lacuna a fechar antes de finalizar o limiar: validar com uma
+  amostra CBR genuinamente sólida e grande (100+ MiB) quando uma estiver
+  disponível.
+
+  **Limitação da medição:** o spike mediu apenas **tempo** de decodificação
+  (`io.Copy(io.Discard)`, decode-only) — **disco e memória não foram
+  medidos**, apesar de o item 2 do §5 pedir os três. Além disso, a medição
+  por `io.Discard` **exclui** a escrita em disco no diretório temporário que
+  o `rarArchive.Open()` real (conforme desenhado abaixo) efetivamente faz —
+  o número de ~537ms reflete só o custo de decodificar, não o de extrair
+  para `tmp-extract/`. Custo de disco e memória do fluxo real de extração
+  permanecem **itens em aberto**, a validar quando uma amostra sólida grande
+  estiver disponível (mesma lacuna do parágrafo acima).
+
+  **Risco de segurança a fechar na Etapa 1/3:** a rota HTTP
+  `/page/{bookID}/{n}` em si é segura (índice numérico numa lista ordenada de
+  entradas, não um caminho cru). A exposição real está na **extração**:
+  `rarArchive.Open()` grava nomes de entrada controlados pelo arquivo no
+  diretório temporário real (`os.UserCacheDir()/hqreader/tmp-extract/<bookID>/`).
+  Um CBR malicioso com uma entrada nomeada `../../../algo` poderia escapar
+  desse diretório durante a extração. É necessário validar/sanitizar nomes de
+  entrada durante a extração para impedir que `../` escape do diretório
+  temporário — nunca confiar em nomes de entrada de um arquivo controlado
+  externamente. O spike de custo de RAR usou `io.Discard` e nunca chegou a
+  escrever um arquivo real em disco, então esse risco nunca foi exercitado.
 
 Ciclo de vida do diretório temporário do `rarArchive`:
 

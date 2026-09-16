@@ -60,8 +60,8 @@ especiais):
 | 4        | 48.0901ms              | 548.2958ms                 |
 
 Média aproximada: ~47ms até a 1ª entrada, ~537ms para decodificar as 39
-entradas por completo (~13.8ms/página em média, ~57 MiB/s de throughput
-efetivo de decodificação nesta máquina).
+entradas por completo (~13.8ms/página em média, ~53.6 MiB/s de throughput
+efetivo de decodificação nesta máquina — 30 195 907 bytes / 0.537s).
 
 ## Amostra não-sólida (comparação)
 
@@ -82,9 +82,9 @@ scan). Os números medidos aqui (~537ms para decodificar 28.8 MiB / 39
 páginas sequencialmente) são baixos e não seriam perceptíveis como travamento
 para o usuário, mas:
 
-1. A extrapolação linear pelo throughput observado (~57 MiB/s) sugere que um
-   CBR sólido de 100 MiB levaria da ordem de ~1.7s, e um de 200 MiB (mais
-   raro, mas existe em releases de scan de alta resolução) da ordem de ~3.5s
+1. A extrapolação linear pelo throughput observado (~53.6 MiB/s) sugere que um
+   CBR sólido de 100 MiB levaria da ordem de ~1.87s, e um de 200 MiB (mais
+   raro, mas existe em releases de scan de alta resolução) da ordem de ~3.73s
    — faixa em que travar a UI sem feedback já é perceptível ao usuário.
 2. O spike não testou compressão sólida real; o custo de decodificação
    sólida pode ser diferente (potencialmente mais rápido por reaproveitar
