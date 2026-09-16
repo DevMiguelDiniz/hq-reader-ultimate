@@ -2,8 +2,10 @@ package main
 
 import (
 	"embed"
+	"fmt"
 
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -29,6 +31,26 @@ func init() {
 // logs any error that might occur.
 func main() {
 
+	// SPIKE (Task 2, §5 item 1): registra uma rota HTTP custom ("/page/")
+	// lado a lado com o AssetFileServerFS que serve a SPA. Isso valida a
+	// aposta arquitetural de servir páginas de quadrinhos via rota HTTP
+	// customizada no AssetServer do Wails, em vez de IPC/bindings.
+	//
+	// go doc confirmou (v3.0.0-beta.23):
+	//   - application.AssetOptions.Handler is http.Handler  (nome bate com o
+	//     assumido no brief: "Assets.Handler")
+	//   - application.AssetFileServerFS(assets fs.FS) http.Handler existe com
+	//     esse nome exato.
+	// Nenhum ajuste de nome foi necessário nesta versão.
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/page/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		fmt.Fprintf(w, "spike ok: %s", r.URL.Path)
+	})
+
+	mux.Handle("/", application.AssetFileServerFS(assets))
+
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
 	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
@@ -41,7 +63,7 @@ func main() {
 			application.NewService(&GreetService{}),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler: mux,
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
