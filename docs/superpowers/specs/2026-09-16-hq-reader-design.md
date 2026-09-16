@@ -88,10 +88,22 @@ Assimetria entre implementações:
 - `rarArchive`: `rardecode` é sequencial. RAR **sólido** (comum em releases de
   scan) comprime entre arquivos — ler a página 80 exige decodificar tudo antes
   dela, sempre. Por isso `rarArchive.Open()` na primeira chamada extrai o
-  arquivo inteiro para um diretório temporário e serve dali em diante. Isso é
-  potencialmente lento e será medido na Etapa 0 com amostras reais de RAR
-  sólido — se o tempo for inaceitável, a UI precisa de indicador de progresso
-  na abertura (decisão adiada até medir).
+  arquivo inteiro para um diretório temporário e serve dali em diante.
+
+  **Validado na Etapa 0** (`spikes/02-rar-cost-finding.md`, decisão **GO COM
+  MITIGAÇÃO**): a única amostra real disponível (28.8 MiB / 39 entradas) levou
+  ~537ms para decodificação sequencial completa, mas se revelou **não-sólida**
+  (`hdr.Solid == false` em todas as entradas) — o pior caso de RAR
+  genuinamente sólido não foi medido diretamente. Extrapolação linear pelo
+  throughput observado (~57 MiB/s) sugere ~1.7s para 100 MiB e ~3.5s para
+  200 MiB, faixa em que travar a UI sem feedback já é perceptível ao usuário.
+  Mitigação decidida: exibir indicador de progresso ("carregando página X de
+  N") sempre que `hdr.Solid == true` na primeira entrada decodificada **e** o
+  tempo estimado de decodificação total ultrapassar um limiar inicial de
+  300–500ms (ajustável). CBZ e RAR não-sólido mantêm acesso direto sem
+  spinner, já que ambos suportam acesso aleatório por entrada. Lacuna a
+  fechar antes de finalizar o limiar: validar com uma amostra CBR
+  genuinamente sólida e grande (100+ MiB) quando uma estiver disponível.
 
 Ciclo de vida do diretório temporário do `rarArchive`:
 
@@ -239,6 +251,30 @@ Regras de cache de página (não mudou do briefing original):
 | Formatos de imagem suportados na v1 | JPEG, PNG, WebP (decode nativo do WebView para página cheia; `x/image` para thumbnail) | AVIF/JXL sem encoder Go viável para thumbnail — mostrar placeholder de erro por página em vez de tentar suportar |
 | Watcher de biblioteca | Nenhum na v1 — rescan manual | `fsnotify` recursivo em biblioteca grande tende a dar mais problema que resolve |
 
+> **Nota de risco aberta (Etapa 0, item 5 — não resolvida por esta validação;
+> requer decisão consciente do dono do projeto antes da Etapa 4):** o spike
+> `spikes/05-windows-cgo-finding.md` confirmou que o **Wails v3 em si não
+> exige CGO** para compilar no Windows (builds com `CGO_ENABLED=0` e
+> `CGO_ENABLED=1` funcionaram igualmente — o binding de WebView2 usa
+> COM/syscall, Go puro). Isso muda a premissa que justificava a linha "Driver
+> SQLite" acima ("Wails já exige CGO no macOS/Linux" deixa de implicar que
+> Windows também exige por conta do próprio Wails).
+>
+> Separadamente, o spike encontrou um problema concreto e imediato: **esta
+> máquina de desenvolvimento não tem nenhum compilador C instalado** (gcc, cc
+> e clang ausentes do PATH). Mantendo `mattn/go-sqlite3` (driver baseado em
+> CGO) como está decidido na tabela acima, o build **falha imediatamente**
+> nesta máquina — e provavelmente em qualquer outra máquina Windows de
+> desenvolvimento ou imagem de CI sem MSYS2/TDM-GCC pré-instalado.
+>
+> Esta nota **não altera** a decisão de driver registrada acima — ela
+> permanece `mattn/go-sqlite3` até que o dono do projeto a revise
+> deliberadamente, pesando o custo de exigir um toolchain C em todo ambiente
+> de build Windows contra alternativas pure-Go (ex.: `crawshaw/sqlite`,
+> `glebarez/sqlite`, citadas no spike). Ver `spikes/FINDINGS.md` (item 5) e
+> `spikes/05-windows-cgo-finding.md` para o detalhamento completo antes de
+> prosseguir para a Etapa 4.
+
 ## 5. Riscos e validação (Etapa 0 — antes de qualquer código de produto)
 
 Cada item abaixo é um go/no-go que pode mudar a arquitetura antes dela virar
@@ -258,6 +294,17 @@ produto:
 
 Artefato desta etapa: relatório curto com o resultado de cada item, código
 descartado ao final (não entra na base do produto).
+
+**Status:** 4 de 5 itens validados na Etapa 0 — itens 1 (GO), 2 (GO COM
+MITIGAÇÃO), 4 (GO) e 5 (GO para o Wails em si, com risco aberto sobre o driver
+SQLite). Ver `spikes/FINDINGS.md` para o resultado detalhado de cada item; os
+ajustes de arquitetura decorrentes foram registrados em §3.3 (mitigação de RAR
+sólido) e na nota de risco logo após a tabela do §4 (CGO/driver SQLite).
+Item 3 (pan/zoom WebKitGTK) permanece **PENDENTE**: não há ambiente Linux com
+WebKitGTK real disponível nesta máquina de desenvolvimento. Deve ser executado
+(VM, máquina física, ou WSL2 com distro instalada) seguindo os passos da Task
+4 do plano de implementação antes de considerar a Etapa 0 completamente
+fechada.
 
 ## 6. Roteiro de etapas (cada uma com artefato demonstrável)
 
