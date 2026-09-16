@@ -161,13 +161,3 @@ func classifyRarError(err error) error {
 	}
 	return ErrCorrupted
 }
-
-// tempDirRoot é um placeholder temporário desta task — a Task 6 move isso
-// para tempdirs.go e não duplica.
-func tempDirRoot() string {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		base = os.TempDir()
-	}
-	return filepath.Join(base, "hqreader", "tmp-extract")
-}
