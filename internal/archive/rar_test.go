@@ -1,10 +1,13 @@
 package archive
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nwaples/rardecode/v2"
 )
 
 // realCBRPath retorna o caminho de uma amostra real de CBR deixada pelo
@@ -81,6 +84,58 @@ func TestRarArchiveCloseRemovesTempDir(t *testing.T) {
 
 	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
 		t.Errorf("tempDir ainda existe depois do Close: %v", err)
+	}
+}
+
+// TestClassifyRarError verifica a classificação de erros do rardecode/v2.
+//
+// Nota da investigação (Task 5): rardecode.ErrBadPassword existe com esse
+// nome exato (a suposição do brief estava certa quanto ao nome), mas ele só
+// é retornado quando uma senha FOI fornecida via Option Password(...) e não
+// confere (archive50.go:229-231). Este pacote nunca usa essa Option, então
+// o sinal real de "protegido por senha" nos nossos caminhos de código é
+// rardecode.ErrArchiveEncrypted (cabeçalho criptografado, retornado por
+// OpenReader/Next) ou rardecode.ErrArchivedFileEncrypted (corpo do arquivo
+// criptografado, retornado só ao ler os dados). Testamos os dois abaixo,
+// além de manter ErrBadPassword coberto por completude.
+func TestClassifyRarError(t *testing.T) {
+	if got := classifyRarError(nil); got != nil {
+		t.Errorf("classifyRarError(nil) = %v, want nil", got)
+	}
+	if got := classifyRarError(rardecode.ErrArchiveEncrypted); !errors.Is(got, ErrPasswordProtected) {
+		t.Errorf("classifyRarError(ErrArchiveEncrypted) = %v, want ErrPasswordProtected", got)
+	}
+	if got := classifyRarError(rardecode.ErrArchivedFileEncrypted); !errors.Is(got, ErrPasswordProtected) {
+		t.Errorf("classifyRarError(ErrArchivedFileEncrypted) = %v, want ErrPasswordProtected", got)
+	}
+	if got := classifyRarError(rardecode.ErrBadPassword); !errors.Is(got, ErrPasswordProtected) {
+		t.Errorf("classifyRarError(ErrBadPassword) = %v, want ErrPasswordProtected", got)
+	}
+	if got := classifyRarError(io.ErrUnexpectedEOF); !errors.Is(got, ErrCorrupted) {
+		t.Errorf("classifyRarError(generic) = %v, want ErrCorrupted", got)
+	}
+}
+
+func TestRarArchiveCorrupted(t *testing.T) {
+	realPath := realCBRPath(t)
+
+	data, err := os.ReadFile(realPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if len(data) < 200 {
+		t.Skip("amostra real pequena demais para truncar com segurança")
+	}
+
+	dir := t.TempDir()
+	truncatedPath := filepath.Join(dir, "truncated.cbr")
+	if err := os.WriteFile(truncatedPath, data[:100], 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err = newRarArchive(truncatedPath)
+	if !errors.Is(err, ErrCorrupted) {
+		t.Errorf("err = %v, want ErrCorrupted", err)
 	}
 }
 

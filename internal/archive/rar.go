@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -127,13 +128,36 @@ func (r *rarArchive) Close() error {
 	return os.RemoveAll(r.tempDir)
 }
 
-// classifyRarError é um placeholder mínimo nesta task — toda a
-// classificação real (distinguir senha de corrompido) é implementada na
-// Task 5. Aqui só existe pra rar.go compilar e pros testes desta task
-// (que não testam classificação de erro) passarem.
+// classifyRarError traduz os erros de github.com/nwaples/rardecode/v2 (pinned
+// v2.4.1) para o vocabulário de erro deste pacote.
+//
+// Investigação (Task 5): o pacote nunca é aberto com a Option Password(...)
+// neste código, ou seja `a.pass` fica sempre nil dentro do rardecode. Isso
+// significa que, na prática, um RAR protegido por senha NUNCA produz
+// rardecode.ErrBadPassword (esse erro só é retornado por getKeys() em
+// archive50.go quando uma senha FOI fornecida e não bate com o hash de
+// verificação — ver archive50.go:229-231, chamado a partir de
+// parseEncryptionBlock, que já retorna cedo com ErrArchiveEncrypted quando
+// a.pass == nil, antes de chegar em getKeys). O sinal real que aparece no
+// nosso fluxo (sem senha) é:
+//   - rardecode.ErrArchiveEncrypted: cabeçalho do archive está criptografado
+//     (nomes de arquivo inclusive); retornado por OpenReader/Next (RAR4 em
+//     archive15.go:352, RAR5 em archive50.go:501,543).
+//   - rardecode.ErrArchivedFileEncrypted: só o conteúdo do arquivo está
+//     criptografado (cabeçalho legível); o erro só aparece ao tentar Read()
+//     o corpo do arquivo (reader.go:378, via errorFile), não em Next().
+//
+// rardecode.ErrBadPassword é mantido na checagem abaixo por segurança/
+// futuro-proofing (caso este pacote um dia passe a usar a Option
+// Password(...)), mas hoje é inalcançável pelos caminhos de newRarArchive.
 func classifyRarError(err error) error {
 	if err == nil {
 		return nil
+	}
+	if errors.Is(err, rardecode.ErrArchiveEncrypted) ||
+		errors.Is(err, rardecode.ErrArchivedFileEncrypted) ||
+		errors.Is(err, rardecode.ErrBadPassword) {
+		return ErrPasswordProtected
 	}
 	return ErrCorrupted
 }
