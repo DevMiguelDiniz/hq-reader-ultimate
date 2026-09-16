@@ -57,6 +57,16 @@
 
 <a id="spike-link" href="/page/test-123">testar rota custom</a>
 
+<!-- SPIKE (Task 5, §5 item 4): UI mínima para validar estado compartilhado
+     entre janelas via CounterService (backend Go). -->
+<div class="counter-spike">
+    <button id="inc" aria-label="incrementar">incrementar</button>
+    <!-- Sem aria-label: o texto do span (o número do contador) precisa ficar
+         exposto como o "Name" acessível do nó, para dar pra ler o valor
+         atual via UI Automation (Windows) sem precisar de um seletor CSS. -->
+    <span id="value">0</span>
+</div>
+
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -6,10 +6,33 @@ import (
 
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// SPIKE (Task 5, §5 item 4): service simples e compartilhado (um único
+// ponteiro, protegido por mutex) usado para validar se duas janelas do
+// mesmo app Wails v3 leem/escrevem o MESMO estado de backend (pré-requisito
+// para a Etapa 7 de destacar/reacoplar janelas).
+type CounterService struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (c *CounterService) Increment() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.count++
+	return c.count
+}
+
+func (c *CounterService) Get() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.count
+}
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
 // Any files in the frontend/dist folder will be embedded into the binary and
@@ -30,6 +53,7 @@ func init() {
 // and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
 // logs any error that might occur.
 func main() {
+	counter := &CounterService{}
 
 	// SPIKE (Task 2, §5 item 1): registra uma rota HTTP custom ("/page/")
 	// lado a lado com o AssetFileServerFS que serve a SPA. Isso valida a
@@ -61,6 +85,7 @@ func main() {
 		Description: "A demo of using raw HTML & CSS",
 		Services: []application.Service{
 			application.NewService(&GreetService{}),
+			application.NewService(counter),
 		},
 		Assets: application.AssetOptions{
 			Handler: mux,
@@ -78,6 +103,23 @@ func main() {
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "Window 1",
 		// Window sized to the golden ratio (1000 / 618 ≈ 1.618).
+		Width:  1000,
+		Height: 618,
+		Mac: application.MacWindow{
+			InvisibleTitleBarHeight: 50,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHiddenInset,
+		},
+		BackgroundColour: application.NewRGB(6, 7, 15),
+		URL:              "/",
+	})
+
+	// SPIKE (Task 5, §5 item 4): segunda janela, mesma SPA, mesmo backend
+	// process. Usada para validar que ambas as janelas enxergam o mesmo
+	// CounterService (estado compartilhado) e que fechar uma delas não
+	// derruba a outra nem o processo do app.
+	app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  "Window 2",
 		Width:  1000,
 		Height: 618,
 		Mac: application.MacWindow{

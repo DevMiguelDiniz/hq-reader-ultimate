@@ -1,5 +1,5 @@
 import {Events, WML} from "@wailsio/runtime";
-import {GreetService} from "../bindings/changeme";
+import {GreetService, CounterService} from "../bindings/changeme";
 
 // Wire up data-wml-openURL links (logos + footer "Docs" link) once the DOM is ready.
 WML.Enable();
@@ -55,6 +55,24 @@ greetButton.addEventListener('click', async () => {
         console.error(err);
     }
 });
+
+// SPIKE (Task 5, §5 item 4): valida estado compartilhado entre janelas via
+// CounterService (backend Go). Cada janela roda esta mesma main.ts, mas
+// ambas chamam o MESMO processo/backend, então Get() deve refletir os
+// Increment() disparados em qualquer uma das janelas.
+const incButton = document.getElementById('inc')! as HTMLButtonElement;
+const valueElement = document.getElementById('value')! as HTMLSpanElement;
+
+async function refreshCounter() {
+    valueElement.textContent = String(await CounterService.Get());
+}
+
+incButton.addEventListener('click', async () => {
+    await CounterService.Increment();
+    await refreshCounter();
+});
+
+refreshCounter();
 
 Events.On('time', (time) => {
     // The full RFC1123 stamp is too wide for the footer on a phone, so on narrow
