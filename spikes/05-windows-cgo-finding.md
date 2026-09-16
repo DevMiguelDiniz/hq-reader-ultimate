@@ -1,35 +1,120 @@
 # Spike 5 — Exigência de CGO no build Windows
 
+## Critical Finding: No C Compiler Detected on Build Machine
+
+**Machine state (verified):**
+```
+gcc: NOT FOUND
+cc: NOT FOUND
+clang: NOT FOUND
+go env CC: gcc (default, not found in PATH)
+go env CGO_ENABLED: 0 (default when no C compiler detected)
+```
+
+**Implication**: The CGO_ENABLED=1 build below does NOT exercise real cgo compilation, because:
+1. No C compiler exists on this Windows machine
+2. `spikes/wails-poc` contains no `import "C"` and no cgo-dependent packages
+3. Setting CGO_ENABLED=1 without an actual C toolchain present is a no-op
+
+Therefore, the CGO_ENABLED=1 run proves only that **Wails' own framework does not require cgo**, not that a functional C toolchain exists on this machine.
+
+---
+
 ## Test Results
 
-**Build com CGO_ENABLED=0:** sucesso
+### Build 1: CGO_ENABLED=0
 
-The build completed successfully. Output shows:
-- Frontend build successful (`✓ built in 178ms`)
-- Native Go binary compiled successfully (`go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "bin/wails-poc.exe"`)
-- Binary created: `bin/wails-poc.exe` (11,074,560 bytes)
+**Command:**
+```powershell
+cd spikes/wails-poc
+$env:CGO_ENABLED = "0"
+wails3 build
+```
 
-**Build com CGO_ENABLED=1:** sucesso
+**Raw Terminal Output:**
+```
+Wails v3.0.0-beta.23 › Build
+wails3 : "uname": executable file not found in $PATH
+[warnings about missing Unix tools suppressed — non-critical on Windows]
+"tail": executable file not found in $PATH
+task: [windows:common:go:mod:tidy] go mod tidy
+task: Task "windows:common:generate:icons" is up to date
+task: Task "windows:common:generate:bindings" is up to date
+task: Task "windows:common:install:frontend:deps:npm" is up to date
+task: Task "build:frontend (DEV= RUNNER=npm)" is up to date
+task: [windows:generate:syso] wails3 generate syso -arch amd64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_amd64.syso
+task: [windows:build:native] go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "bin/wails-poc.exe"
+task: [windows:build:native] powershell Remove-item *.syso
 
-The build completed successfully with identical output. Output shows:
-- Frontend build successful (`✓ built in 87ms`)
-- Native Go binary compiled successfully
-- Binary created: `bin/wails-poc.exe` (11,074,560 bytes)
+Need documentation? Run: wails3 docs
+ ♥   If Wails is useful to you or your company, please consider sponsoring the project: https://github.com/sponsors/leaanthony
+```
+
+**Result:** BUILD SUCCEEDED ✓
+- Binary created: `bin/wails-poc.exe`
+- No C compiler needed or invoked
+
+### Build 2: CGO_ENABLED=1
+
+**Command:**
+```powershell
+cd spikes/wails-poc
+$env:CGO_ENABLED = "1"
+wails3 build
+```
+
+**Raw Terminal Output:**
+```
+Wails v3.0.0-beta.23 › Build
+wails3 : "uname": executable file not found in $PATH
+[warnings about missing Unix tools suppressed — non-critical on Windows]
+"tail": executable file not found in $PATH
+task: [windows:common:go:mod:tidy] go mod tidy
+task: Task "windows:common:generate:icons" is up to date
+task: Task "windows:common:generate:bindings" is up to date
+task: Task "windows:common:install:frontend:deps:npm" is up to date
+task: Task "build:frontend (DEV= RUNNER=npm)" is up to date
+task: [windows:generate:syso] wails3 generate syso -arch amd64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ../wails_windows_amd64.syso
+task: [windows:build:native] go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o "bin/wails-poc.exe"
+task: [windows:build:native] powershell Remove-item *.syso
+
+Need documentation? Run: wails3 docs
+ ♥   If Wails is useful to you or your company, please consider sponsoring the project: https://github.com/sponsors/leaanthony
+```
+
+**Result:** BUILD SUCCEEDED ✓
+- Binary created: `bin/wails-poc.exe`
+- **No C compiler invoked** (no cgo-dependent code in this app, no C toolchain available on machine)
+
+---
 
 ## Conclusão
 
-**O Wails v3 no Windows NÃO exige CGO.**
+### Sobre Wails v3 e CGO
 
-Both builds completed without errors, indicating that Wails v3.0.0-beta.23's own internals do not require CGO to be enabled on Windows. The build toolchain functions perfectly well with pure Go binaries.
+**Wails v3 no Windows NÃO exige CGO para sua própria compilação.**
 
-## Impacto na escolha do driver SQLite (`mattn/go-sqlite3`, que exige CGO)
+Both builds completed successfully without invoking any C compiler, because:
+- Wails v3's Windows webview binding uses COM and syscall (pure Go), not cgo
+- Setting `CGO_ENABLED=0` does not prevent Wails from building
 
-**Decisão**: Escolher `mattn/go-sqlite3` INTRODUZIRIA uma exigência NEW de um compilador C/toolchain (como GCC via MSYS2 ou TDM-GCC) no Windows, que não existiria de outra forma.
+### Sobre mattn/go-sqlite3 — Impacto Real e Imediato
 
-- **Situação atual**: Desenvolvedores e usuários finais podem fazer build no Windows com apenas o Go instalado.
-- **Com `mattn/go-sqlite3`**: Um compilador C se tornaria obrigatório no Windows, impactando:
-  - Overhead de setup para desenvolvimento
-  - Possibilidade de erros em build para usuários finais
-  - Complexidade aumentada da toolchain
+**CRITICAL**: Escolher `mattn/go-sqlite3` INTRODUCES uma exigência imediata de um compilador C no Windows.
 
-**Recomendação** (para §4.1 do design): Considerar drivers SQLite puros em Go como alternativa (ex: `crawshaw/sqlite`, `glebarez/sqlite`, ou `mattn/go-sqlite3` com `sqlite3_omit_load_extension` quando apropriado) se o objetivo é evitar uma dependência de toolchain C no Windows. Se `mattn/go-sqlite3` for escolhido apesar dessa descoberta, documentar explicitamente a exigência de um compilador C para builds no Windows.
+**Situação atual (sem mattn/go-sqlite3):**
+- Desenvolvedores podem fazer build no Windows com APENAS Go instalado
+- Máquinas CI podem usar imagens padrão sem MSYS2/TDM-GCC
+- Usuários finais não precisam de um toolchain C
+
+**Com `mattn/go-sqlite3`:**
+- **Build falha imediatamente** em máquinas Windows sem C compiler (ex: esta máquina de teste)
+- Exige instalação de MSYS2 (recomendado) ou TDM-GCC antes de qualquer build
+- Aumenta complexidade de setup para desenvolvedores
+- CI/CD pipelines precisam de custom toolchain setup
+- Possível impacto em distribuição (cross-compilation para Windows é mais difícil)
+
+**Recomendação** (para §4.1 do design):
+- ⚠️ **Se mattn/go-sqlite3 for escolhido**: documentar explicitamente que Windows dev/build requer MSYS2 (gcc, make, etc) — e considerar quão viável é isso para o projeto
+- ✓ **Alternativa preferida**: drivers SQLite puros em Go (`crawshaw/sqlite`, `glebarez/sqlite`, etc) que removem essa exigência de toolchain C inteiramente no Windows
+- Se mattn/go-sqlite3 for mantido: considerar build tags ou condicional para tests/CI que não exigem SQLite no Windows
