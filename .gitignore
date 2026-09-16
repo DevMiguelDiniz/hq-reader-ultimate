@@ -1,0 +1,4 @@
+spikes/**/testdata/
+spikes/**/*.cbr
+spikes/**/*.cbz
+spikes/wails-poc/frontend/sample-*.jpg
