@@ -35,3 +35,15 @@ func TestOpenDispatchesCBR(t *testing.T) {
 		t.Error("esperava ao menos uma página")
 	}
 }
+
+// TestOpenExtensionIsSeparatorAware confirma que a detecção de extensão usa
+// filepath.Ext (ciente de separador de path) em vez de procurar o último
+// "." na string inteira — um bug anterior extraía ".5\book" como "extensão"
+// de um caminho Windows como "C:\comics\v1.5\book" (ponto num nome de
+// diretório, sem extensão real no componente final).
+func TestOpenExtensionIsSeparatorAware(t *testing.T) {
+	_, err := Open(`C:\comics\v1.5\book`)
+	if !errors.Is(err, ErrUnsupportedFormat) {
+		t.Errorf("err = %v, want ErrUnsupportedFormat (ponto está num diretório, não numa extensão real)", err)
+	}
+}

@@ -4,14 +4,24 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/DevMiguelDiniz/hq-reader-ultimate/internal/archive"
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run contém toda a lógica que antes vivia em main(). Retornar o código de
+// saída em vez de chamar os.Exit diretamente nos subcomandos garante que os
+// defers (em especial a.Close(), que remove o diretório temporário de
+// extração do RAR) rodem antes do processo terminar — os.Exit pula todos os
+// defers pendentes no programa inteiro.
+func run() int {
 	if len(os.Args) < 3 {
 		fmt.Fprintln(os.Stderr, "uso: hqcli list <arquivo> | hqcli dump <arquivo> <indice>")
-		os.Exit(1)
+		return 1
 	}
 
 	cmd, path := os.Args[1], os.Args[2]
@@ -19,26 +29,26 @@ func main() {
 	a, err := archive.Open(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro ao abrir %s: %v\n", path, err)
-		os.Exit(1)
+		return 1
 	}
 	defer a.Close()
 
 	switch cmd {
 	case "list":
-		runList(a)
+		return runList(a)
 	case "dump":
 		if len(os.Args) < 4 {
 			fmt.Fprintln(os.Stderr, "uso: hqcli dump <arquivo> <indice>")
-			os.Exit(1)
+			return 1
 		}
-		runDump(a, os.Args[3])
+		return runDump(a, os.Args[3])
 	default:
 		fmt.Fprintf(os.Stderr, "comando desconhecido: %s\n", cmd)
-		os.Exit(1)
+		return 1
 	}
 }
 
-func runList(a archive.Archive) {
+func runList(a archive.Archive) int {
 	info, err := a.Metadata()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro ao ler metadados: %v\n", err)
@@ -48,22 +58,24 @@ func runList(a archive.Archive) {
 	for _, p := range a.Pages() {
 		fmt.Printf("%3d  %-40s  %8d bytes  %s\n", p.Index, p.Name, p.Size, p.ContentType)
 	}
+	return 0
 }
 
-func runDump(a archive.Archive, indexArg string) {
-	var index int
-	if _, err := fmt.Sscanf(indexArg, "%d", &index); err != nil {
+func runDump(a archive.Archive, indexArg string) int {
+	index, err := strconv.Atoi(indexArg)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "índice inválido: %s\n", indexArg)
-		os.Exit(1)
+		return 1
 	}
 	rc, err := a.Open(index)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "erro ao abrir página %d: %v\n", index, err)
-		os.Exit(1)
+		return 1
 	}
 	defer rc.Close()
 	if _, err := io.Copy(os.Stdout, rc); err != nil {
 		fmt.Fprintf(os.Stderr, "erro ao copiar: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

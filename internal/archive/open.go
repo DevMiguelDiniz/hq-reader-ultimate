@@ -1,13 +1,16 @@
 package archive
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 // Open detecta o formato pela extensão do arquivo e retorna a
 // implementação de Archive correspondente. É a única forma pela qual o
 // resto da aplicação deve abrir um livro — nunca instanciar zipArchive/
 // rarArchive diretamente.
 func Open(path string) (Archive, error) {
-	switch strings.ToLower(extOf(path)) {
+	switch strings.ToLower(filepath.Ext(path)) {
 	case ".cbz", ".zip":
 		return newZipArchive(path)
 	case ".cbr", ".rar":
@@ -15,12 +18,4 @@ func Open(path string) (Archive, error) {
 	default:
 		return nil, ErrUnsupportedFormat
 	}
-}
-
-func extOf(path string) string {
-	i := strings.LastIndex(path, ".")
-	if i < 0 {
-		return ""
-	}
-	return path[i:]
 }

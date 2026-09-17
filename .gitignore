@@ -2,3 +2,9 @@ spikes/**/testdata/
 spikes/**/*.cbr
 spikes/**/*.cbz
 spikes/wails-poc/frontend/sample-*.jpg
+
+# Binários de CLI de debug (hqcli), não commitados.
+/hqcli
+/hqcli.exe
+cmd/hqcli/hqcli
+cmd/hqcli/hqcli.exe

@@ -22,9 +22,9 @@ func TestNaturalLess(t *testing.T) {
 
 func TestContentTypeForName(t *testing.T) {
 	cases := []struct {
-		name    string
-		wantCT  string
-		wantOK  bool
+		name   string
+		wantCT string
+		wantOK bool
 	}{
 		{"page1.jpg", "image/jpeg", true},
 		{"page1.JPEG", "image/jpeg", true},
