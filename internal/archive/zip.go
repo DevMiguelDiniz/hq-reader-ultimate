@@ -2,7 +2,10 @@ package archive
 
 import (
 	"archive/zip"
+	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 )
 
@@ -15,6 +18,9 @@ type zipArchive struct {
 func newZipArchive(path string) (Archive, error) {
 	r, err := zip.OpenReader(path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+			return nil, fmt.Errorf("archive: nao foi possivel abrir %s: %w", path, err)
+		}
 		return nil, ErrCorrupted
 	}
 
@@ -35,7 +41,11 @@ func newZipArchive(path string) (Archive, error) {
 	}, nil
 }
 
-func (z *zipArchive) Pages() []PageEntry { return z.pages }
+func (z *zipArchive) Pages() []PageEntry {
+	pagesCopy := make([]PageEntry, len(z.pages))
+	copy(pagesCopy, z.pages)
+	return pagesCopy
+}
 
 func (z *zipArchive) Open(index int) (io.ReadCloser, error) {
 	if index < 0 || index >= len(z.pages) {
@@ -60,7 +70,11 @@ func (z *zipArchive) Metadata() (*ComicInfo, error) {
 				return nil, ErrCorrupted
 			}
 			defer rc.Close()
-			return parseComicInfo(rc)
+			info, err := parseComicInfo(rc)
+			if err != nil {
+				return nil, fmt.Errorf("archive: ComicInfo.xml malformado: %w", ErrCorrupted)
+			}
+			return info, nil
 		}
 	}
 	return nil, nil

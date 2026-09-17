@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ type rarArchive struct {
 func sanitizeEntryName(name string) (string, error) {
 	clean := filepath.Clean(filepath.FromSlash(name))
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || filepath.IsAbs(clean) {
-		return "", fmt.Errorf("archive: nome de entrada inseguro: %q", name)
+		return "", fmt.Errorf("archive: nome de entrada inseguro: %q: %w", name, ErrCorrupted)
 	}
 	return clean, nil
 }
@@ -32,16 +33,19 @@ func sanitizeEntryName(name string) (string, error) {
 func newRarArchive(path string) (Archive, error) {
 	root := tempDirRoot()
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("archive: nao foi possivel criar diretorio temporario: %w", ErrCorrupted)
 	}
 	tempDir, err := os.MkdirTemp(root, "*")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("archive: nao foi possivel criar diretorio temporario: %w", ErrCorrupted)
 	}
 
 	r, err := rardecode.OpenReader(path)
 	if err != nil {
 		os.RemoveAll(tempDir)
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+			return nil, fmt.Errorf("archive: nao foi possivel abrir %s: %w", path, err)
+		}
 		return nil, classifyRarError(err)
 	}
 	defer r.Close()
@@ -68,26 +72,27 @@ func newRarArchive(path string) (Archive, error) {
 			return nil, err
 		}
 
-		entries = append(entries, rawEntry{Name: hdr.Name, Size: hdr.UnPackedSize})
-
 		destPath := filepath.Join(tempDir, destName)
 		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 			os.RemoveAll(tempDir)
-			return nil, err
+			return nil, fmt.Errorf("archive: nao foi possivel criar diretorio para %q: %w", destName, ErrCorrupted)
 		}
 		out, err := os.Create(destPath)
 		if err != nil {
 			os.RemoveAll(tempDir)
-			return nil, err
+			return nil, fmt.Errorf("archive: nao foi possivel criar arquivo temporario para %q: %w", destName, ErrCorrupted)
 		}
-		if _, err := io.Copy(out, r); err != nil {
+		written, err := io.Copy(out, r)
+		if err != nil {
 			out.Close()
 			os.RemoveAll(tempDir)
 			return nil, classifyRarError(err)
 		}
 		out.Close()
 
-		if strings.EqualFold(filepath.Base(hdr.Name), "ComicInfo.xml") {
+		entries = append(entries, rawEntry{Name: destName, Size: written})
+
+		if strings.EqualFold(hdr.Name, "ComicInfo.xml") {
 			comicInfoPath = destPath
 		}
 	}
@@ -99,7 +104,11 @@ func newRarArchive(path string) (Archive, error) {
 	}, nil
 }
 
-func (r *rarArchive) Pages() []PageEntry { return r.pages }
+func (r *rarArchive) Pages() []PageEntry {
+	pagesCopy := make([]PageEntry, len(r.pages))
+	copy(pagesCopy, r.pages)
+	return pagesCopy
+}
 
 func (r *rarArchive) Open(index int) (io.ReadCloser, error) {
 	if index < 0 || index >= len(r.pages) {
@@ -109,7 +118,11 @@ func (r *rarArchive) Open(index int) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return os.Open(filepath.Join(r.tempDir, name))
+	f, err := os.Open(filepath.Join(r.tempDir, name))
+	if err != nil {
+		return nil, fmt.Errorf("archive: pagina ausente no diretorio temporario: %w", ErrCorrupted)
+	}
+	return f, nil
 }
 
 func (r *rarArchive) Metadata() (*ComicInfo, error) {
@@ -118,10 +131,14 @@ func (r *rarArchive) Metadata() (*ComicInfo, error) {
 	}
 	f, err := os.Open(r.comicInfoPath)
 	if err != nil {
-		return nil, ErrCorrupted
+		return nil, fmt.Errorf("archive: nao foi possivel abrir ComicInfo.xml: %w", ErrCorrupted)
 	}
 	defer f.Close()
-	return parseComicInfo(f)
+	info, err := parseComicInfo(f)
+	if err != nil {
+		return nil, fmt.Errorf("archive: ComicInfo.xml malformado: %w", ErrCorrupted)
+	}
+	return info, nil
 }
 
 func (r *rarArchive) Close() error {

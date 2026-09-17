@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,5 +109,49 @@ func TestZipArchiveNoMetadata(t *testing.T) {
 	}
 	if info != nil {
 		t.Errorf("Metadata = %+v, want nil (sem ComicInfo.xml)", info)
+	}
+}
+
+// TestZipArchiveMissingFile confirma que um caminho inexistente é
+// distinguível de um arquivo presente mas corrompido: o erro retornado deve
+// satisfazer errors.Is(err, fs.ErrNotExist), não colapsar para ErrCorrupted.
+// Isso importa para um futuro scanner de biblioteca (Etapa 4) que precisa
+// diferenciar "arquivo sumiu" de "arquivo está presente mas quebrado".
+func TestZipArchiveMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "nao-existe.cbz")
+
+	_, err := newZipArchive(missing)
+	if err == nil {
+		t.Fatal("esperava erro para arquivo inexistente, veio nil")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("err = %v, want errors.Is(err, fs.ErrNotExist) == true", err)
+	}
+	if errors.Is(err, ErrCorrupted) {
+		t.Errorf("err = %v, nao deveria satisfazer ErrCorrupted (é ausência de arquivo, não corrupção)", err)
+	}
+}
+
+// TestZipArchiveComicInfoOnlyAtRoot confirma que ComicInfo.xml dentro de uma
+// subpasta NÃO é reconhecido — a convenção é que ele vive na raiz do
+// archive, e essa regra deve ser idêntica entre os backends CBZ e CBR.
+func TestZipArchiveComicInfoOnlyAtRoot(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page1.jpg":         tinyJPEG,
+		"sub/ComicInfo.xml": []byte(`<ComicInfo><Title>Sub</Title></ComicInfo>`),
+	})
+	a, err := newZipArchive(path)
+	if err != nil {
+		t.Fatalf("newZipArchive: %v", err)
+	}
+	defer a.Close()
+
+	info, err := a.Metadata()
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if info != nil {
+		t.Errorf("Metadata = %+v, want nil (ComicInfo.xml em subpasta não deve contar)", info)
 	}
 }
