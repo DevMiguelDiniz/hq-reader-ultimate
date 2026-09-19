@@ -12,7 +12,6 @@ func TestPageHandlerServesBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer svc.Close(res.BookID)
 
 	handler := PageHandler(svc)
 	req := httptest.NewRequest("GET", "/page/"+res.BookID+"/0", nil)
@@ -52,7 +51,6 @@ func TestPageHandlerIndexOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer svc.Close(res.BookID)
 
 	handler := PageHandler(svc)
 	req := httptest.NewRequest("GET", "/page/"+res.BookID+"/99", nil)
