@@ -8,6 +8,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/DevMiguelDiniz/hq-reader-ultimate/internal/archive"
 	"github.com/DevMiguelDiniz/hq-reader-ultimate/internal/reader"
 )
 
@@ -15,6 +16,11 @@ import (
 var assets embed.FS
 
 func main() {
+	// Clean up orphaned temp directories from previous sessions that may have crashed
+	if err := archive.CleanOrphanedTempDirs(); err != nil {
+		log.Printf("aviso: falha ao limpar diretorios temp orfaos: %v", err)
+	}
+
 	svc := reader.NewService()
 
 	bookPath := os.Getenv("HQREADER_BOOK")
