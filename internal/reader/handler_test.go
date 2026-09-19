@@ -12,6 +12,8 @@ func TestPageHandlerServesBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	// necessário no Windows: sem isso, t.TempDir() falha ao limpar porque o arquivo zip aberto pelo Service ainda segura um handle
+	defer svc.Close(res.BookID)
 
 	handler := PageHandler(svc)
 	req := httptest.NewRequest("GET", "/page/"+res.BookID+"/0", nil)
@@ -51,6 +53,8 @@ func TestPageHandlerIndexOutOfRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	// necessário no Windows: sem isso, t.TempDir() falha ao limpar porque o arquivo zip aberto pelo Service ainda segura um handle
+	defer svc.Close(res.BookID)
 
 	handler := PageHandler(svc)
 	req := httptest.NewRequest("GET", "/page/"+res.BookID+"/99", nil)
