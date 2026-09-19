@@ -8,3 +8,8 @@ spikes/wails-poc/frontend/sample-*.jpg
 /hqcli.exe
 cmd/hqcli/hqcli
 cmd/hqcli/hqcli.exe
+
+# Binário do app hqreader quando buildado a partir da raiz do repo
+# (ex.: `go build ./cmd/hqreader`), não commitado.
+/hqreader
+/hqreader.exe
