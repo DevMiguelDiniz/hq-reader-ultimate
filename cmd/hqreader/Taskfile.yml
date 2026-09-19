@@ -15,8 +15,8 @@ includes:
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
-  ios: ./build/ios/Taskfile.yml
-  android: ./build/android/Taskfile.yml
+  # Mobile (ios/android) is out of scope for this project (spec §1) and its
+  # build/ios and build/android scaffolding was removed; no includes for them.
 
 tasks:
   build:

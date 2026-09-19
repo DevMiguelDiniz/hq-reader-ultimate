@@ -21,8 +21,8 @@ tasks:
     sources:
       - package.json
       - package-lock.json
-    generates:
-      - node_modules
+    status:
+      - test -d node_modules
     preconditions:
       - sh: npm version
         msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
@@ -35,8 +35,8 @@ tasks:
       - package.json
       - bun.lock
       - bun.lockb
-    generates:
-      - node_modules
+    status:
+      - test -d node_modules
     preconditions:
       - sh: bun --version
         msg: "bun not found"
@@ -48,8 +48,8 @@ tasks:
     sources:
       - package.json
       - pnpm-lock.yaml
-    generates:
-      - node_modules
+    status:
+      - test -d node_modules
     preconditions:
       - sh: pnpm --version
         msg: "pnpm not found"
