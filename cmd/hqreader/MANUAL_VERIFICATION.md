@@ -100,3 +100,79 @@ corretas do contador em ambos os `-output.txt` implicam a mesma correção
 para `img.src`. A correção byte-a-byte da resposta HTTP em si
 (`Content-Type`, `Content-Length`, status 200/404) já tem cobertura direta
 em `internal/reader/handler_test.go` (Task 3).
+
+## Etapa 3b — React + Tailwind + shadcn/ui + Zustand
+
+**Data:** 2026-09-22
+**Cenário:** mesmo CBZ sintético de 3 páginas, agora com a UI em React chamando
+SetCurrentPage no backend a cada navegação (não mais um índice só local).
+
+Script real: `verify-navigation-react.ps1`. Saída bruta:
+`verify-navigation-react-dev-output.txt` (wails3 dev, PID 29424 nesta rodada),
+`verify-navigation-react-prod-output.txt` (wails3 build, PID 29112 nesta rodada).
+
+- [x] Primeira página carrega, contador "1 / 3"
+- [x] Navegação Anterior/Proxima funciona e desabilita nos limites
+- [x] Mesmo comportamento em produção (build embutido)
+- [x] Nenhum erro observado no console/saída relacionado a SetCurrentPage
+
+**Observações:**
+
+`verify-navigation-react.ps1` é uma adaptação (não uma reescrita do zero) do
+`verify-navigation.ps1` da Etapa 2 — reaproveita a lógica de localizar a
+janela pelo PID via UI Automation, restaurar/focar a janela, invocar botões
+por nome e o esqueleto de PASS/FAIL. Uma investigação real da árvore de UI
+Automation da janela React rodando (não suposição) revelou uma diferença de
+DOM relevante em relação à Etapa 2 que exigiu ajuste: o contador antigo
+(`<span id="counter">1 / 3</span>`) era um único nó de texto, exposto como
+um único controle `Text` do UI Automation com `Name='1 / 3'`. O contador
+novo é JSX (`<span>{currentPage + 1} / {pageCount}</span>`), e o React
+renderiza cada `{expressão}` e cada trecho de string literal como um nó de
+texto do DOM separado — a árvore ao vivo confirmou isso: três controles
+`Text` irmãos, na ordem do documento, com `Name='1'`, `Name=' / '`,
+`Name='3'`, nenhum deles contendo a string completa "N / M". A busca por
+nome de botão (`Find-ByName`/`Invoke-ByName`) não precisou de nenhuma
+mudança — os botões shadcn/ui `<Button variant="secondary">` continuam
+sendo `<button>` reais com `Name` exatamente "Anterior"/"Proxima" na árvore
+de acessibilidade. `Get-CounterText` foi reescrita para concatenar todos os
+nós `Text` descendentes (na ordem retornada por `FindAll`, que é a ordem do
+documento) antes de aplicar a mesma regex `^\d+\s*/\s*\d+$` à string
+concatenada, em vez de casar a regex contra um único nó.
+
+O script também adiciona duas verificações que a Etapa 2 não tinha:
+confirmar via `IsEnabled` do próprio `AutomationElement` que o botão
+"Proxima" fica desabilitado na última página e que "Anterior" fica
+desabilitado na primeira — refletindo o atributo HTML `disabled` real
+(`disabled={currentPage >= pageCount - 1}` / `disabled={currentPage <= 0}`
+em `Reader.tsx`, componente shadcn/Radix), não apenas inferido pelo
+contador parar de mudar. As 10 verificações (contador inicial, avanço até
+o fim, `Proxima.IsEnabled=False` no fim, clamp no fim, retrocesso até o
+início, `Anterior.IsEnabled=False` no início, clamp no início, e presença
+do elemento `<img>`) são idênticas nos dois arquivos `-output.txt`, com
+`=== SUMMARY: 10 passed, 0 failed ===` em ambos e exit code 0 nos dois.
+
+Clicar em um botão já desabilitado via `InvokePattern.Invoke()` levanta uma
+exceção COM ("Erro não reconhecido") em vez de silenciosamente não fazer
+nada — visível nos dois `-output.txt` no Passo D/F ("clique 3x" nos
+extremos). Isso é esperado/aceitável (o próprio UI Automation não permite
+invocar um controle com `IsEnabled=False`) e o script já trata esse caso
+com `try/catch`, sem contar como falha — o que importa é que o contador
+permanece "3 / 3"/"1 / 3" depois, confirmando o clamp real no backend via
+`SetCurrentPage`/`Current`, e não a exceção em si.
+
+Nenhum erro relacionado a `SetCurrentPage` apareceu na saída de processo
+(stdout/stderr do `wails3 dev`, nem do binário de produção) durante a
+navegação real em nenhum dos dois modos — a única linha de erro observada
+nos logs brutos de `wails3 dev` (`ERROR task: Failed to run task "run":
+exit status 255`) é um artefato esperado de eu ter finalizado o processo
+`hqreader.exe` com `Stop-Process -Force` ao fim da verificação, não um erro
+do app ou de `SetCurrentPage`.
+
+Mesma limitação reconhecida na Etapa 2 continua valendo aqui: UI Automation
+não lê o atributo `src` do `<img>` byte-a-byte (WebView2/Chromium não expõe
+`ValuePattern` nesse nó), então o Passo G confirma a presença do elemento
+(`ControlType.Image`, `Name='pagina'`, batendo com `alt="pagina"` em
+`Reader.tsx`) mas não o `src` renderizado — a correção do `src`
+(`/page/{bookID}/{index}`) é a mesma consequência direta de `goToPage`
+chamando `SetCurrentPage` e a store atualizando `currentPage`, e a
+resposta HTTP em si já tem cobertura em `internal/reader/handler_test.go`.
