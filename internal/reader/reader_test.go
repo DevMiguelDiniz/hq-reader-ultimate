@@ -227,3 +227,42 @@ func TestServiceSetCurrentPageOutOfRange(t *testing.T) {
 		t.Errorf("err = %v, want archive.ErrCorrupted", err)
 	}
 }
+
+func TestServiceOpenCreatesPrefetchCoordinator(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{"page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	s.mu.RLock()
+	entry := s.books[res.BookID]
+	s.mu.RUnlock()
+	if entry.prefetch == nil {
+		t.Fatal("entry.prefetch é nil apos Open()")
+	}
+}
+
+func TestServiceSetCurrentPageTriggersPrefetch(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page0.jpg": tinyJPEG, "page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG,
+	})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	if err := s.SetCurrentPage(res.BookID, 1); err != nil {
+		t.Fatalf("SetCurrentPage: %v", err)
+	}
+
+	s.mu.RLock()
+	entry := s.books[res.BookID]
+	s.mu.RUnlock()
+
+	waitForSlot(t, entry.prefetch, 1)
+}

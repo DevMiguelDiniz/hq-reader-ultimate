@@ -27,6 +27,7 @@ type OpenResult struct {
 type bookEntry struct {
 	archive     archive.Archive
 	currentPage int
+	prefetch    *prefetchCoordinator
 }
 
 // Service mantém o registro de livros abertos nesta sessão, indexados por
@@ -57,7 +58,7 @@ func (s *Service) Open(path string) (OpenResult, error) {
 	}
 
 	s.mu.Lock()
-	s.books[id] = &bookEntry{archive: a}
+	s.books[id] = &bookEntry{archive: a, prefetch: newPrefetchCoordinator(a)}
 	s.lastOpened = id
 	s.mu.Unlock()
 
@@ -120,6 +121,8 @@ func (s *Service) SetCurrentPage(bookID string, index int) error {
 	}
 	entry.currentPage = index
 	s.mu.Unlock()
+
+	entry.prefetch.SetCurrent(index)
 	return nil
 }
 
@@ -150,6 +153,7 @@ func (s *Service) Close(bookID string) error {
 	if !ok {
 		return nil
 	}
+	entry.prefetch.Cancel()
 	return entry.archive.Close()
 }
 
