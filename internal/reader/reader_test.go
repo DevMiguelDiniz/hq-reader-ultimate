@@ -266,3 +266,63 @@ func TestServiceSetCurrentPageTriggersPrefetch(t *testing.T) {
 
 	waitForSlot(t, entry.prefetch, 1)
 }
+
+func TestServicePageReaderUsesPrefetchedBytes(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page0.jpg": tinyJPEG, "page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG,
+	})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	if err := s.SetCurrentPage(res.BookID, 1); err != nil {
+		t.Fatalf("SetCurrentPage: %v", err)
+	}
+
+	s.mu.RLock()
+	entry := s.books[res.BookID]
+	s.mu.RUnlock()
+	waitForSlot(t, entry.prefetch, 1)
+
+	rc, err := s.PageReader(res.BookID, 1)
+	if err != nil {
+		t.Fatalf("PageReader: %v", err)
+	}
+	data, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(data) != len(tinyJPEG) {
+		t.Errorf("len(data) = %d, want %d", len(data), len(tinyJPEG))
+	}
+}
+
+func TestServicePageReaderFallsBackWhenNotPrefetched(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{"page0.jpg": tinyJPEG})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	// Nenhum SetCurrentPage foi chamado, entao o cache esta vazio — o
+	// caminho de leitura direta do archive (cache-through) deve funcionar
+	// normalmente.
+	rc, err := s.PageReader(res.BookID, 0)
+	if err != nil {
+		t.Fatalf("PageReader: %v", err)
+	}
+	data, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if len(data) != len(tinyJPEG) {
+		t.Errorf("len(data) = %d, want %d", len(data), len(tinyJPEG))
+	}
+}

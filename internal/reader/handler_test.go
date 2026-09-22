@@ -77,3 +77,35 @@ func TestPageHandlerMalformedPath(t *testing.T) {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}
 }
+
+func TestPageHandlerServesPrefetchedBytes(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page0.jpg": tinyJPEG, "page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG,
+	})
+	svc := NewService()
+	res, err := svc.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer svc.Close(res.BookID)
+
+	if err := svc.SetCurrentPage(res.BookID, 1); err != nil {
+		t.Fatalf("SetCurrentPage: %v", err)
+	}
+	svc.mu.RLock()
+	entry := svc.books[res.BookID]
+	svc.mu.RUnlock()
+	waitForSlot(t, entry.prefetch, 1)
+
+	handler := PageHandler(svc)
+	req := httptest.NewRequest("GET", "/page/"+res.BookID+"/1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != string(tinyJPEG) {
+		t.Errorf("body = %v, want %v", rec.Body.Bytes(), tinyJPEG)
+	}
+}

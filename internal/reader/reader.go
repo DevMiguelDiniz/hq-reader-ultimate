@@ -1,6 +1,7 @@
 package reader
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -100,6 +101,9 @@ func (s *Service) PageReader(bookID string, index int) (io.ReadCloser, error) {
 	entry, err := s.get(bookID)
 	if err != nil {
 		return nil, err
+	}
+	if data, ok := entry.prefetch.Get(index); ok {
+		return io.NopCloser(bytes.NewReader(data)), nil
 	}
 	return entry.archive.Open(index)
 }
