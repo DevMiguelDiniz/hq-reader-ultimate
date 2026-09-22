@@ -1,6 +1,12 @@
 <#
 Task 6 (Etapa 2) — manual E2E verification script, kept for auditability.
 
+SUPERSEDED by verify-navigation-react.ps1: this script targets the old
+vanilla-JS UI (a single #counter element) and now permanently fails against
+the current React frontend, which renders the counter as separate DOM text
+nodes. Kept as a historical record only — do not re-run this expecting it
+to pass against the current (React) UI.
+
 Not production code. Throwaway PowerShell using Windows UI Automation
 (System.Windows.Automation) to drive the REAL native window opened by
 hqreader.exe (either `wails3 dev`'s bin/hqreader.exe, or the `wails3 build`

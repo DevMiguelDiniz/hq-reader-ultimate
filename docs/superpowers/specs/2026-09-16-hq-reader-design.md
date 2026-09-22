@@ -62,6 +62,20 @@ duas decisões da v1:
 - Mantém aberta (sem implementar agora) a opção de um server build futuro
   (biblioteca acessível via navegador).
 
+> **Gap conhecido (Etapa 3b):** `ReaderService.CurrentPage(bookID)` existe,
+> tem teste Go e binding TypeScript gerado, mas nenhum código do frontend o
+> chama hoje. `loadCurrentBook` em
+> `cmd/hqreader/frontend/src/store/readerStore.ts` sempre chama
+> `SetCurrentPage(bookID, 0)` incondicionalmente ao montar, em vez de
+> primeiro ler `CurrentPage(bookID)` pra adotar a página que o backend já
+> tem registrada. Ou seja: a escrita do estado de página chega corretamente
+> ao backend (o prefetch continua funcionando), mas o backend ainda não é a
+> fonte autoritativa na leitura — um remount hoje (ou uma segunda janela na
+> Etapa 7) reseta pra página 0 em vez de herdar o estado existente. Isso
+> precisa ser resolvido antes de ou durante qualquer etapa futura que
+> dependa de estado de página compartilhado entre janelas/remounts
+> (Etapa 7 em particular).
+
 ### 3.3 Interface Archive
 
 ```go

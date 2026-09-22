@@ -144,8 +144,8 @@ confirmar via `IsEnabled` do próprio `AutomationElement` que o botão
 "Proxima" fica desabilitado na última página e que "Anterior" fica
 desabilitado na primeira — refletindo o atributo HTML `disabled` real
 (`disabled={currentPage >= pageCount - 1}` / `disabled={currentPage <= 0}`
-em `Reader.tsx`, componente shadcn/Radix), não apenas inferido pelo
-contador parar de mudar. As 10 verificações (contador inicial, avanço até
+em `Reader.tsx`, componente shadcn/ui sobre `@base-ui/react`), não apenas
+inferido pelo contador parar de mudar. As 10 verificações (contador inicial, avanço até
 o fim, `Proxima.IsEnabled=False` no fim, clamp no fim, retrocesso até o
 início, `Anterior.IsEnabled=False` no início, clamp no início, e presença
 do elemento `<img>`) são idênticas nos dois arquivos `-output.txt`, com
@@ -157,8 +157,16 @@ nada — visível nos dois `-output.txt` no Passo D/F ("clique 3x" nos
 extremos). Isso é esperado/aceitável (o próprio UI Automation não permite
 invocar um controle com `IsEnabled=False`) e o script já trata esse caso
 com `try/catch`, sem contar como falha — o que importa é que o contador
-permanece "3 / 3"/"1 / 3" depois, confirmando o clamp real no backend via
-`SetCurrentPage`/`Current`, e não a exceção em si.
+permanece "3 / 3"/"1 / 3" depois, confirmando o clamp do FRONTEND: o
+atributo `disabled` do botão já impede o 3º clique de chegar a
+`InvokePattern.Invoke()` de fato, e o `return` antecipado de `goToPage` em
+`cmd/hqreader/frontend/src/store/readerStore.ts` (quando `index < 0 ||
+index >= pageCount`) garante que `SetCurrentPage` nunca é chamado com um
+índice fora dos limites. Este script não exercita o clamp de limites do
+próprio backend (o `archive.ErrCorrupted` de `internal/reader/reader.go`) —
+ele só observa o texto do contador na UI, nunca o estado Go diretamente —,
+mas esse clamp tem cobertura direta e separada em
+`internal/reader/reader_test.go`.
 
 Nenhum erro relacionado a `SetCurrentPage` apareceu na saída de processo
 (stdout/stderr do `wails3 dev`, nem do binário de produção) durante a
