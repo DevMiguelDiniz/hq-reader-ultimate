@@ -40,6 +40,14 @@ export function Current(): $CancellablePromise<$models.OpenResult> {
 }
 
 /**
+ * CurrentPage retorna a última página definida via SetCurrentPage para o
+ * livro bookID (0 se SetCurrentPage nunca foi chamado para ele).
+ */
+export function CurrentPage(bookID: string): $CancellablePromise<number> {
+    return $Call.ByID(3833338435, bookID);
+}
+
+/**
  * Open abre um livro em path e retorna um bookID de sessão opaco.
  */
 export function Open(path: string): $CancellablePromise<$models.OpenResult> {
@@ -60,4 +68,13 @@ export function PageInfo(bookID: string, index: number): $CancellablePromise<arc
  */
 export function PageReader(bookID: string, index: number): $CancellablePromise<io$0.ReadCloser> {
     return $Call.ByID(903333239, bookID, index);
+}
+
+/**
+ * SetCurrentPage registra qual página está sendo exibida agora para o
+ * livro bookID. Esse estado vive no backend (não no frontend) — ver
+ * comentário de bookEntry.
+ */
+export function SetCurrentPage(bookID: string, index: number): $CancellablePromise<void> {
+    return $Call.ByID(1185085721, bookID, index);
 }
