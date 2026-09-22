@@ -20,18 +20,27 @@ type OpenResult struct {
 	PageCount int
 }
 
+// bookEntry agrupa o archive aberto e o estado de sessão associado a ele
+// (página atual). Esse estado vive no backend desde a Etapa 3 — nunca só
+// em useState do React — para que uma futura janela destacada (Etapa 7)
+// possa compartilhar o mesmo estado sem duplicar lógica no front.
+type bookEntry struct {
+	archive     archive.Archive
+	currentPage int
+}
+
 // Service mantém o registro de livros abertos nesta sessão, indexados por
 // um bookID opaco (nunca o caminho do arquivo, por segurança — ver §3.1 do
 // spec: a rota HTTP nunca deve expor o caminho real no disco).
 type Service struct {
 	mu         sync.RWMutex
-	books      map[string]archive.Archive
+	books      map[string]*bookEntry
 	lastOpened string
 }
 
 // NewService cria um Service vazio, sem nenhum livro aberto.
 func NewService() *Service {
-	return &Service{books: make(map[string]archive.Archive)}
+	return &Service{books: make(map[string]*bookEntry)}
 }
 
 // Open abre um livro em path e retorna um bookID de sessão opaco.
@@ -48,7 +57,7 @@ func (s *Service) Open(path string) (OpenResult, error) {
 	}
 
 	s.mu.Lock()
-	s.books[id] = a
+	s.books[id] = &bookEntry{archive: a}
 	s.lastOpened = id
 	s.mu.Unlock()
 
@@ -63,21 +72,21 @@ func (s *Service) Current() (OpenResult, error) {
 	if s.lastOpened == "" {
 		return OpenResult{}, ErrBookNotFound
 	}
-	a, ok := s.books[s.lastOpened]
+	entry, ok := s.books[s.lastOpened]
 	if !ok {
 		return OpenResult{}, ErrBookNotFound
 	}
-	return OpenResult{BookID: s.lastOpened, PageCount: len(a.Pages())}, nil
+	return OpenResult{BookID: s.lastOpened, PageCount: len(entry.archive.Pages())}, nil
 }
 
 // PageInfo retorna os metadados (tamanho, content-type) da página index do
 // livro bookID, sem ler os bytes da página.
 func (s *Service) PageInfo(bookID string, index int) (archive.PageEntry, error) {
-	a, err := s.get(bookID)
+	entry, err := s.get(bookID)
 	if err != nil {
 		return archive.PageEntry{}, err
 	}
-	pages := a.Pages()
+	pages := entry.archive.Pages()
 	if index < 0 || index >= len(pages) {
 		return archive.PageEntry{}, archive.ErrCorrupted
 	}
@@ -87,18 +96,50 @@ func (s *Service) PageInfo(bookID string, index int) (archive.PageEntry, error) 
 // PageReader abre um leitor pros bytes crus da página index do livro
 // bookID. Quem chama é responsável por fechar o reader retornado.
 func (s *Service) PageReader(bookID string, index int) (io.ReadCloser, error) {
-	a, err := s.get(bookID)
+	entry, err := s.get(bookID)
 	if err != nil {
 		return nil, err
 	}
-	return a.Open(index)
+	return entry.archive.Open(index)
+}
+
+// SetCurrentPage registra qual página está sendo exibida agora para o
+// livro bookID. Esse estado vive no backend (não no frontend) — ver
+// comentário de bookEntry.
+func (s *Service) SetCurrentPage(bookID string, index int) error {
+	s.mu.Lock()
+	entry, ok := s.books[bookID]
+	if !ok {
+		s.mu.Unlock()
+		return ErrBookNotFound
+	}
+	pages := entry.archive.Pages()
+	if index < 0 || index >= len(pages) {
+		s.mu.Unlock()
+		return archive.ErrCorrupted
+	}
+	entry.currentPage = index
+	s.mu.Unlock()
+	return nil
+}
+
+// CurrentPage retorna a última página definida via SetCurrentPage para o
+// livro bookID (0 se SetCurrentPage nunca foi chamado para ele).
+func (s *Service) CurrentPage(bookID string) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.books[bookID]
+	if !ok {
+		return 0, ErrBookNotFound
+	}
+	return entry.currentPage, nil
 }
 
 // Close fecha o livro bookID e remove seu registro. Chamar com um bookID
 // desconhecido não é erro (idempotente).
 func (s *Service) Close(bookID string) error {
 	s.mu.Lock()
-	a, ok := s.books[bookID]
+	entry, ok := s.books[bookID]
 	if ok {
 		delete(s.books, bookID)
 		if s.lastOpened == bookID {
@@ -109,17 +150,17 @@ func (s *Service) Close(bookID string) error {
 	if !ok {
 		return nil
 	}
-	return a.Close()
+	return entry.archive.Close()
 }
 
-func (s *Service) get(bookID string) (archive.Archive, error) {
+func (s *Service) get(bookID string) (*bookEntry, error) {
 	s.mu.RLock()
-	a, ok := s.books[bookID]
+	entry, ok := s.books[bookID]
 	s.mu.RUnlock()
 	if !ok {
 		return nil, ErrBookNotFound
 	}
-	return a, nil
+	return entry, nil
 }
 
 func newBookID() (string, error) {

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DevMiguelDiniz/hq-reader-ultimate/internal/archive"
 )
 
 var tinyJPEG = []byte{0xFF, 0xD8, 0xFF, 0xD9}
@@ -149,5 +151,79 @@ func TestServiceCurrent(t *testing.T) {
 	}
 	if cur.BookID != res.BookID || cur.PageCount != res.PageCount {
 		t.Errorf("Current() = %+v, want %+v", cur, res)
+	}
+}
+
+func TestServiceSetAndGetCurrentPage(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page1.jpg": tinyJPEG,
+		"page2.jpg": tinyJPEG,
+		"page3.jpg": tinyJPEG,
+	})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	if err := s.SetCurrentPage(res.BookID, 2); err != nil {
+		t.Fatalf("SetCurrentPage: %v", err)
+	}
+	got, err := s.CurrentPage(res.BookID)
+	if err != nil {
+		t.Fatalf("CurrentPage: %v", err)
+	}
+	if got != 2 {
+		t.Errorf("CurrentPage = %d, want 2", got)
+	}
+}
+
+func TestServiceCurrentPageDefaultsToZero(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{"page1.jpg": tinyJPEG})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	got, err := s.CurrentPage(res.BookID)
+	if err != nil {
+		t.Fatalf("CurrentPage: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("CurrentPage antes de qualquer SetCurrentPage = %d, want 0", got)
+	}
+}
+
+func TestServiceCurrentPageUnknownBook(t *testing.T) {
+	s := NewService()
+	_, err := s.CurrentPage("nao-existe")
+	if !errors.Is(err, ErrBookNotFound) {
+		t.Errorf("err = %v, want ErrBookNotFound", err)
+	}
+}
+
+func TestServiceSetCurrentPageUnknownBook(t *testing.T) {
+	s := NewService()
+	err := s.SetCurrentPage("nao-existe", 0)
+	if !errors.Is(err, ErrBookNotFound) {
+		t.Errorf("err = %v, want ErrBookNotFound", err)
+	}
+}
+
+func TestServiceSetCurrentPageOutOfRange(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{"page1.jpg": tinyJPEG})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close(res.BookID)
+
+	err = s.SetCurrentPage(res.BookID, 5)
+	if !errors.Is(err, archive.ErrCorrupted) {
+		t.Errorf("err = %v, want archive.ErrCorrupted", err)
 	}
 }
