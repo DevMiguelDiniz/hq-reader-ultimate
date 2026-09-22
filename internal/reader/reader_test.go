@@ -301,6 +301,44 @@ func TestServicePageReaderUsesPrefetchedBytes(t *testing.T) {
 	}
 }
 
+// TestServiceCloseAfterSetCurrentPageReturnsNil é a regressao do Finding 2
+// no nivel que importa de verdade: SetCurrentPage dispara prefetches em
+// background e, em seguida, Close() e chamado quase imediatamente — antes
+// de qualquer fetch ter chance de terminar sozinho. Isso exercita
+// prefetchCoordinator.Cancel() com fetches genuinamente em andamento.
+//
+// Com fixtures sinteticas em CBZ, archive.Close() nao tem o modo de falha
+// especifico do Windows com CBR/RAR (RemoveAll falhando por handle aberto
+// num diretorio temporario) — mas esse teste ainda garante que o Cancel()
+// baseado em WaitGroup nao trava, nao deadlocka e nao faz Close() retornar
+// erro, que e o mecanismo do qual o fix do CBR depende.
+func TestServiceCloseAfterSetCurrentPageReturnsNil(t *testing.T) {
+	path := writeTestZip(t, map[string][]byte{
+		"page0.jpg": tinyJPEG, "page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG,
+		"page3.jpg": tinyJPEG, "page4.jpg": tinyJPEG, "page5.jpg": tinyJPEG,
+	})
+	s := NewService()
+	res, err := s.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	if err := s.SetCurrentPage(res.BookID, 3); err != nil {
+		t.Fatalf("SetCurrentPage: %v", err)
+	}
+
+	// Fecha imediatamente, sem esperar os fetches disparados por
+	// SetCurrentPage terminarem — e exatamente a corrida que o Finding 2
+	// descreve.
+	if err := s.Close(res.BookID); err != nil {
+		t.Fatalf("Close: %v, want nil", err)
+	}
+
+	if _, err := s.PageInfo(res.BookID, 0); !errors.Is(err, ErrBookNotFound) {
+		t.Errorf("PageInfo apos Close: err = %v, want ErrBookNotFound", err)
+	}
+}
+
 func TestServicePageReaderFallsBackWhenNotPrefetched(t *testing.T) {
 	path := writeTestZip(t, map[string][]byte{"page0.jpg": tinyJPEG})
 	s := NewService()
