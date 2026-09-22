@@ -3,53 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <title>hqreader</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #222; color: #eee; font-family: sans-serif; }
-    #viewport { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: center; }
-    #page { max-width: 90vw; max-height: 80vh; }
-    #controls { margin-top: 12px; }
-    button { font-size: 16px; padding: 8px 16px; margin: 0 8px; }
-  </style>
 </head>
 <body>
-  <div id="viewport">
-    <img id="page" src="" alt="pagina" />
-    <div id="controls">
-      <button id="prev">Anterior</button>
-      <span id="counter"></span>
-      <button id="next">Proxima</button>
-    </div>
-  </div>
-  <script type="module">
-    import { Current } from './bindings/github.com/DevMiguelDiniz/hq-reader-ultimate/internal/reader/service.js';
-
-    let bookID = '';
-    let pageCount = 0;
-    let index = 0;
-
-    const img = document.getElementById('page');
-    const counter = document.getElementById('counter');
-
-    function render() {
-      img.src = `/page/${bookID}/${index}`;
-      counter.textContent = `${index + 1} / ${pageCount}`;
-    }
-
-    document.getElementById('prev').addEventListener('click', () => {
-      if (index > 0) { index--; render(); }
-    });
-    document.getElementById('next').addEventListener('click', () => {
-      if (index < pageCount - 1) { index++; render(); }
-    });
-
-    Current().then((result) => {
-      bookID = result.BookID;
-      pageCount = result.PageCount;
-      index = 0;
-      render();
-    }).catch((err) => {
-      document.body.textContent = 'Erro ao abrir o livro: ' + err;
-    });
-  </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
