@@ -400,9 +400,9 @@ frontend. **Nenhuma mudança no backend Go.**
 |---|---|
 | Validação Linux/WebKitGTK (§5 item 3) | Adiada por inteiro. Esta etapa implementa e valida só no Windows; a validação em WebKitGTK vira item obrigatório antes de qualquer release Linux. |
 | Mecanismo de zoom/pan | `transform: scale() translate()` direto no `<img>`, com `will-change: transform`. Sem canvas, sem biblioteca de zoom. |
-| Interação | Roda do mouse dá zoom centrado no cursor (passo de ~15%). Com zoom acima do ajuste à tela, clicar e arrastar move a imagem. No ajuste à tela, arrastar não faz nada. |
-| Limites de zoom | Mínimo 100% (= ajustar à tela), máximo 400%. O pan é limitado para a borda da imagem nunca sair do viewport. |
-| Troca de página | Sempre reseta zoom e pan para o ajuste à tela (feito dentro de `goToPage`). |
+| Interação | Roda do mouse dá zoom centrado no cursor (passo de ~15%). Com a imagem maior que o viewport (zoom acima de 100%), clicar e arrastar move a imagem. Em 100% ou abaixo, arrastar não faz nada. |
+| Limites de zoom | Mínimo 50%, máximo 400%; 100% é o ajuste à tela. Abaixo de 100% a página fica menor que o viewport e permanece centralizada. Acima de 100%, o pan é limitado para a borda da imagem nunca sair do viewport. |
+| Troca de página | Sempre reseta zoom e pan para o ajuste à tela, 100% (feito dentro de `goToPage`), inclusive se o usuário estava abaixo de 100%. |
 | Página única/dupla | Toggle só em memória (`pageMode`, padrão `single`), reseta ao reiniciar o app. Persistência por livro fica para a Etapa 4/5, quando o SQLite existir. |
 | Pareamento no modo duplo | Página 1 (capa) sempre sozinha; depois pares (2,3), (4,5)... Página em formato paisagem (`naturalWidth > naturalHeight`) é spread e sempre aparece sozinha (já decidido no §4). |
 | Navegação no modo duplo | Próxima/anterior avança um par (ou uma página sozinha), não uma página por vez. |
