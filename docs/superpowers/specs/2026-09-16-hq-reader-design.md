@@ -386,3 +386,79 @@ fechada.
 Este documento cobre o design de arquitetura completo da v1. O detalhamento de
 tarefas por etapa (começando pela Etapa 0) é feito via plano de implementação
 (skill `writing-plans`), não neste documento.
+
+## 10. Etapa 3c — Interações do leitor
+
+Data: 2026-10-07. Segunda metade do "leitor completo" da Etapa 3 (§6). A
+Etapa 3b já entregou a stack React/Tailwind/shadcn/Zustand e a navegação
+religada ao estado do backend; esta etapa adiciona só interação de leitura no
+frontend. **Nenhuma mudança no backend Go.**
+
+### 10.1 Decisões fechadas
+
+| Item | Decisão |
+|---|---|
+| Validação Linux/WebKitGTK (§5 item 3) | Adiada por inteiro. Esta etapa implementa e valida só no Windows; a validação em WebKitGTK vira item obrigatório antes de qualquer release Linux. |
+| Mecanismo de zoom/pan | `transform: scale() translate()` direto no `<img>`, com `will-change: transform`. Sem canvas, sem biblioteca de zoom. |
+| Interação | Roda do mouse dá zoom centrado no cursor (passo de ~15%). Com zoom acima do ajuste à tela, clicar e arrastar move a imagem. No ajuste à tela, arrastar não faz nada. |
+| Limites de zoom | Mínimo 100% (= ajustar à tela), máximo 400%. O pan é limitado para a borda da imagem nunca sair do viewport. |
+| Troca de página | Sempre reseta zoom e pan para o ajuste à tela (feito dentro de `goToPage`). |
+| Página única/dupla | Toggle só em memória (`pageMode`, padrão `single`), reseta ao reiniciar o app. Persistência por livro fica para a Etapa 4/5, quando o SQLite existir. |
+| Pareamento no modo duplo | Página 1 (capa) sempre sozinha; depois pares (2,3), (4,5)... Página em formato paisagem (`naturalWidth > naturalHeight`) é spread e sempre aparece sozinha (já decidido no §4). |
+| Navegação no modo duplo | Próxima/anterior avança um par (ou uma página sozinha), não uma página por vez. |
+| Placeholder de erro | Ícone de aviso, texto "Não foi possível carregar esta página" e botão "Tentar novamente". Anterior/Próxima continuam habilitados. No modo duplo, só a metade que falhou vira placeholder. |
+| Motion | Só na troca de página: fade de ~150ms via `AnimatePresence`, chaveado pelo índice. Zoom/pan não passa pelo Motion. Com `prefers-reduced-motion`, a troca é instantânea. |
+
+### 10.2 Atalhos de teclado
+
+Um único listener `keydown`, ativo só enquanto há livro aberto.
+
+| Tecla | Ação |
+|---|---|
+| `←` ou `A` | Página anterior |
+| `→` ou `D` | Próxima página |
+| `Espaço` | Próxima página |
+| `+` ou `=` | Zoom in (mesmo passo da roda) |
+| `-` | Zoom out |
+| `0` | Reseta zoom e pan |
+| `M` | Alterna página única e dupla |
+
+As setas seguem navegando com zoom ativo, porque o pan é só por arrasto.
+
+### 10.3 Estrutura de código
+
+Tudo em `cmd/hqreader/frontend/src`:
+
+- `store/readerStore.ts` (existente): ganha `zoom`, `pan`, `pageMode`,
+  `pageAspects` e as ações `zoomBy`, `setPan`, `resetView`, `togglePageMode`.
+  `goToPage` passa a chamar `resetView`.
+- `lib/computeSpread.ts` (novo): função pura
+  `computeSpread(currentPage, pageMode, pageAspects)` que devolve quais
+  índices de página compõem a visão atual.
+- `components/PageView.tsx` (novo): renderiza a página ou o par, aplica o
+  transform, trata `onError`, o botão de tentar novamente e a transição.
+- `hooks/useReaderShortcuts.ts` (novo): o listener de teclado.
+- `components/Reader.tsx` (existente): compõe esses pedaços.
+
+### 10.4 Detecção de spread e limitação assumida
+
+A proporção de cada página vem de `naturalWidth/naturalHeight` no `onLoad` do
+`<img>` e é guardada em `pageAspects`. Consequência assumida: no modo duplo, a
+proporção de uma página só é conhecida depois do primeiro carregamento dela.
+O prefetch do backend (N±2) deixa as vizinhas em RAM, então o custo esperado é
+pequeno, mas a primeira decisão de pareamento espera o `onLoad` das páginas
+envolvidas antes de renderizar o par.
+
+### 10.5 Verificação
+
+Mesma política da Etapa 3b: sem framework de teste de frontend. Tudo, incluindo
+`computeSpread`, é verificado por script de UI Automation em PowerShell,
+só em Windows, contra um CBZ sintético com páginas de proporções variadas
+(capa, retratos, ao menos um spread no meio, total ímpar de páginas para
+cobrir a última página sozinha). Script completo e re-executável mais saída
+bruta, em dev e em `wails3 build`, commitados.
+
+### 10.6 Fora de escopo
+
+Validação em WebKitGTK/Linux, persistência do modo de página, modo
+contínuo/webtoon, modo mangá/RTL, qualquer mudança no backend.
