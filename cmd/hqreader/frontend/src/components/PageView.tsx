@@ -163,6 +163,14 @@ export default function PageView() {
     if (!last) {
       return;
     }
+    // O pointerup pode nunca chegar: o runtime do Wails trata a faixa de 5 px
+    // do topo como borda de redimensionamento, e o redimensionamento nativo
+    // da janela engole o mouseup. Sem o botão principal pressionado o arrasto
+    // já acabou; senão a página seguiria o mouse sem botão.
+    if ((e.buttons & 1) === 0) {
+      endDrag(e);
+      return;
+    }
     panBy(e.clientX - last.x, e.clientY - last.y);
     dragRef.current = { x: e.clientX, y: e.clientY };
   };
@@ -197,6 +205,7 @@ export default function PageView() {
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
     >
       <div
         ref={contentRef}
