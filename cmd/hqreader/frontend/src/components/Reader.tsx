@@ -1,5 +1,7 @@
 import { useEffect } from "react";
+import PageView from "@/components/PageView";
 import { Button } from "@/components/ui/button";
+import { computeSpread, viewLabel } from "@/lib/computeSpread";
 import { useReaderStore } from "@/store/readerStore";
 
 export default function Reader() {
@@ -10,8 +12,13 @@ export default function Reader() {
     loading,
     error,
     navError,
+    zoom,
+    pageMode,
+    pageAspects,
     loadCurrentBook,
-    goToPage,
+    goNext,
+    goPrev,
+    togglePageMode,
     clearNavError,
   } = useReaderStore();
 
@@ -38,8 +45,12 @@ export default function Reader() {
     );
   }
 
+  const view = computeSpread(currentPage, pageMode, pageAspects, pageCount);
+  const firstIndex = view.indices[0] ?? 0;
+  const lastIndex = view.indices[view.indices.length - 1] ?? 0;
+
   return (
-    <div className="flex h-screen flex-col items-center justify-center gap-4 bg-neutral-900 text-neutral-100">
+    <div className="flex h-screen flex-col bg-neutral-900 text-neutral-100">
       {navError && (
         <div className="fixed top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-md bg-red-900/90 px-4 py-2 text-sm text-red-100 shadow-lg">
           <span>Erro ao navegar: {navError}</span>
@@ -53,28 +64,26 @@ export default function Reader() {
           </button>
         </div>
       )}
-      <img
-        src={`/page/${bookID}/${currentPage}`}
-        alt="pagina"
-        className="max-h-[80vh] max-w-[90vw]"
-      />
-      <div className="flex items-center gap-4">
+      <PageView />
+      <div className="flex items-center justify-center gap-4 py-3">
         <Button
           variant="secondary"
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage <= 0}
+          onClick={() => goPrev()}
+          disabled={firstIndex <= 0}
         >
           Anterior
         </Button>
-        <span>
-          {currentPage + 1} / {pageCount}
-        </span>
+        <span>{`${viewLabel(view)} / ${pageCount}`}</span>
         <Button
           variant="secondary"
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage >= pageCount - 1}
+          onClick={() => goNext()}
+          disabled={lastIndex >= pageCount - 1}
         >
           Proxima
+        </Button>
+        <span>{`${Math.round(zoom * 100)}%`}</span>
+        <Button variant="secondary" onClick={togglePageMode}>
+          {pageMode === "single" ? "Pagina unica" : "Pagina dupla"}
         </Button>
       </div>
     </div>
