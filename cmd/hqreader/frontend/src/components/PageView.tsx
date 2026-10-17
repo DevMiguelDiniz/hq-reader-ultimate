@@ -5,9 +5,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { TriangleAlert } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { computeSpread } from "@/lib/computeSpread";
 import { useReaderStore } from "@/store/readerStore";
+
+// Duração de cada metade (saída e entrada) do fade: ~150ms no total.
+const FADE_HALF_DURATION = 0.075;
 
 interface PageSlotProps {
   bookID: string;
@@ -84,6 +88,7 @@ export default function PageView() {
   const zoomBy = useReaderStore((s) => s.zoomBy);
   const panBy = useReaderStore((s) => s.panBy);
 
+  const reduceMotion = useReducedMotion();
   const viewportRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ x: number; y: number } | null>(null);
@@ -195,24 +200,35 @@ export default function PageView() {
     >
       <div
         ref={contentRef}
-        className={`flex items-center justify-center gap-2 will-change-transform ${view.pending ? "invisible" : ""}`}
+        className={`will-change-transform ${view.pending ? "invisible" : ""}`}
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         }}
       >
-        {view.indices.map((index) => (
-          <PageSlot
-            key={index}
-            bookID={bookID}
-            index={index}
-            wide={wide}
-            retry={retries[index] ?? 0}
-            failed={failed[index] ?? false}
-            onLoad={handleLoad}
-            onError={handleError}
-            onRetry={handleRetry}
-          />
-        ))}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={view.indices.join("-")}
+            className="flex items-center justify-center gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0 : FADE_HALF_DURATION }}
+          >
+            {view.indices.map((index) => (
+              <PageSlot
+                key={index}
+                bookID={bookID}
+                index={index}
+                wide={wide}
+                retry={retries[index] ?? 0}
+                failed={failed[index] ?? false}
+                onLoad={handleLoad}
+                onError={handleError}
+                onRetry={handleRetry}
+              />
+            ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
