@@ -425,7 +425,7 @@ const content = { width: 600, height: 1000 };
 const viewport = { width: 900, height: 600 };
 assert.deepEqual(clampPan({ x: 50, y: 50 }, 1, { width: 300, height: 500 }, viewport), { x: 0, y: 0 });
 assert.deepEqual(clampPan({ x: -50, y: 50 }, 1, { width: 300, height: 500 }, viewport), { x: 0, y: 0 });
-assert.deepEqual(clampPan({ x: 50, y: 500 }, 2, content, viewport), { x: 50, y: 700 });
+assert.deepEqual(clampPan({ x: 50, y: 500 }, 2, content, viewport), { x: 50, y: 500 });
 assert.deepEqual(clampPan({ x: 500, y: -900 }, 2, content, viewport), { x: 150, y: -700 });
 
 const z = zoomAt(1, { x: 0, y: 0 }, 2, { x: 100, y: 50 }, content, viewport);
