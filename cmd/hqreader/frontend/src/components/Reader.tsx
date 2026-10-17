@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import PageView from "@/components/PageView";
 import { Button } from "@/components/ui/button";
+import { useReaderShortcuts } from "@/hooks/useReaderShortcuts";
 import { computeSpread, viewLabel } from "@/lib/computeSpread";
 import { useReaderStore } from "@/store/readerStore";
 
@@ -21,6 +22,8 @@ export default function Reader() {
     togglePageMode,
     clearNavError,
   } = useReaderStore();
+
+  useReaderShortcuts();
 
   // loadCurrentBook é chamado uma vez ao montar. Sob React StrictMode (dev),
   // o efeito roda duas vezes — isso é seguro aqui porque Current() e
