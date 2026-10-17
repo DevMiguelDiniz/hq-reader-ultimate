@@ -9,8 +9,10 @@ export default function Reader() {
     currentPage,
     loading,
     error,
+    navError,
     loadCurrentBook,
     goToPage,
+    clearNavError,
   } = useReaderStore();
 
   // loadCurrentBook é chamado uma vez ao montar. Sob React StrictMode (dev),
@@ -38,6 +40,19 @@ export default function Reader() {
 
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-4 bg-neutral-900 text-neutral-100">
+      {navError && (
+        <div className="fixed top-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-md bg-red-900/90 px-4 py-2 text-sm text-red-100 shadow-lg">
+          <span>Erro ao navegar: {navError}</span>
+          <button
+            type="button"
+            onClick={clearNavError}
+            aria-label="Dispensar aviso"
+            className="text-red-200 hover:text-white"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <img
         src={`/page/${bookID}/${currentPage}`}
         alt="pagina"
