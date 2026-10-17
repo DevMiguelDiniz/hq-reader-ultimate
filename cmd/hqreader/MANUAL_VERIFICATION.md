@@ -196,11 +196,11 @@ magenta pura vertical (40 px, centralizada na horizontal, altura total),
 usadas para medir em pixels a posição vertical e horizontal da página.
 
 Script real: `verify-reader-interactions.ps1`. Saída bruta:
-`verify-reader-interactions-dev-output.txt` (wails3 dev, PID 22232; cadeia de
+`verify-reader-interactions-dev-output.txt` (wails3 dev, PID 15848; cadeia de
 pais `wails3.exe <- cmd.exe <- wails3.exe`),
-`verify-reader-interactions-prod-output.txt` (wails3 build, PID 23576; pai
+`verify-reader-interactions-prod-output.txt` (wails3 build, PID 19452; pai
 `powershell.exe`, iniciado direto do shell).
-Resultado: `=== SUMMARY: 141 passed, 0 failed ===` e `=== SUMMARY: 141 passed, 0 failed ===`
+Resultado: `=== SUMMARY: 144 passed, 0 failed ===` e `=== SUMMARY: 144 passed, 0 failed ===`
 (exit code 0 nas duas execuções).
 
 - [x] Navegação por teclado (setas, A/D, Espaço, rajada, Ctrl+→ ignorado, Espaço após clique em botão avança uma página)
@@ -211,6 +211,7 @@ Resultado: `=== SUMMARY: 141 passed, 0 failed ===` e `=== SUMMARY: 141 passed, 0
 - [x] Pan vertical: arrastar move a página (+50 → +50) e para no limite calculado nas duas direções (±178,9 px a 182%; faixa em 702,5 e 343,5, esperado 702,4 e 344,6); um arrasto extra no limite não move
 - [x] Pan horizontal: a 182% (página de 642,5 px, mais estreita que o viewport de 884 px) arrastar em X não move; a 400% (página de 1412 px) arrastar +100 move +100 e o pan para no limite calculado nas duas direções (±264 px; faixa magenta em 1225 e 697, esperado 1224 e 696)
 - [x] Mover o mouse sem botão pressionado não move a página (depois de um arrasto que terminou fora da janela)
+- [x] Regressão do arrasto preso: depois de redimensionar a janela pela faixa de 5 px do topo da área cliente (clique real, arrasto de 30 px para cima, a janela realmente redimensiona: topo 190 → 163), mover o mouse sem botão não move a página (dy=0, dx=0; antes da correção no PageView: dy=168)
 - [x] Redimensionar com zoom ativo: maximizar mantém o pan (re-limitado a ±269 px; faixa em 344,0, esperado 343,5) e restaurar o re-limita a ±178,9 px (faixa em 343,5, esperado 344,6); a página continua visível nos dois estados
 - [x] Trocar de página (botão ou seta) reseta o zoom para 100% e o pan nos dois eixos: a nova página volta centralizada
 - [x] Modo duplo: capa sozinha, pares, spread sozinho, vizinho do spread sozinho, última página sozinha, ida e volta
@@ -235,19 +236,21 @@ Resultado: `=== SUMMARY: 141 passed, 0 failed ===` e `=== SUMMARY: 141 passed, 0
 - Os dois arquivos de saída diferem apenas nas linhas `PID:` e `Parent
   chain:`. Todas as verificações e todas as medidas de pixel são iguais em
   dev e em produção.
-- **Defeito encontrado (não corrigido nesta task, reportado em
-  task-7-report.md):** se um redimensionamento nativo da janela começa por
-  um clique na faixa de 5 px do topo da área cliente (o runtime do Wails
-  trata essa faixa como borda de redimensionamento, e ela pertence ao
-  viewport do PageView), o mouseup é engolido pelo redimensionamento e o
-  PageView fica com o arrasto armado: depois disso a página segue o mouse
-  sem botão pressionado até o próximo clique. Na primeira execução oficial
-  desta seção o script disparou o mesmo caminho sinteticamente (um arrasto
-  solto acima da janela seguido de um clique sem movimento intermediário),
-  e por isso a medida com a janela maximizada saiu deslocada (542 em vez de
-  ~344). O script agora move o cursor em passos, como uma pessoa, e
-  verifica que mover o mouse sem botão não move a página no caminho normal.
-  O caso do defeito não é testado (falharia até o app ser corrigido).
+- **Defeito encontrado e corrigido (detalhes em task-7-report.md):** se um
+  redimensionamento nativo da janela começa por um clique na faixa de 5 px
+  do topo da área cliente (o runtime do Wails trata essa faixa como borda de
+  redimensionamento, e ela pertence ao viewport do PageView), o mouseup é
+  engolido pelo redimensionamento. O PageView ficava com o arrasto armado e
+  a página seguia o mouse sem botão pressionado até o próximo clique. Na
+  primeira execução oficial desta seção o script disparou o mesmo caminho
+  sinteticamente (um arrasto solto acima da janela seguido de um clique sem
+  movimento intermediário), e por isso a medida com a janela maximizada saiu
+  deslocada (542 em vez de ~344). Correção (commit separado): `onPointerMove`
+  encerra o arrasto quando o botão principal não está pressionado e
+  `onLostPointerCapture` também o encerra. A seção 6.8 do script reproduz o
+  caminho real como regressão: antes da correção falhava (dy=168), depois
+  passa (dy=0). Fora da 6.8 o script move o cursor em passos, como uma
+  pessoa, para que cada checagem meça só o que diz medir.
 
 **Limitações desta verificação:** a transição de Motion (fade de ~150ms) não é
 observável por UI Automation; o que se verifica é que, depois de navegar, só

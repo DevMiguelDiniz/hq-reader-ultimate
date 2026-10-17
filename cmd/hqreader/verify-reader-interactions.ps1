@@ -428,12 +428,12 @@ function Move-Cursor([double]$x, [double]$y) {
 # arrasto capturado que sai da janela por cima) e so a limpa no proximo
 # mousemove longe das bordas. Se o cursor salta de volta para a pagina e
 # aperta sem nenhum mousemove no caminho, o Wails trata o clique como inicio
-# de um redimensionamento nativo da janela, que engole o mouseup, e o
-# PageView fica com o arrasto armado (a pagina passa a seguir o cursor sem
-# botao). Isso e um defeito real do app, alcancavel por uma pessoa
-# (redimensionar a janela pela borda superior, faixa de 5 px que pertence ao
-# viewport do PageView) e esta reportado em task-7-report.md; este script nao
-# o testa (falharia de proposito) e evita disparar o caminho sintetico.
+# de um redimensionamento nativo da janela, que engole o mouseup. Antes da
+# correcao no PageView isso deixava o arrasto armado (a pagina seguia o
+# cursor sem botao); o caminho real de uma pessoa (redimensionar a janela
+# pela faixa de 5 px do topo, que pertence ao viewport do PageView) e testado
+# como regressao na secao 6.8. Fora dela o script anda em passos para que
+# cada checagem meca so o que diz medir.
 function Move-CursorPath([double]$x, [double]$y) {
     $p = [System.Windows.Forms.Cursor]::Position
     $steps = 10
@@ -933,6 +933,48 @@ CheckTrue "Proxima still enabled after retry" (Get-ButtonEnabled $win 'Proxima')
 Send-Keys "{RIGHT}"; Check-Counter "navigate past the error page" "8 / 10"
 Check-ButtonAbsent "placeholder gone on a good page" 'Tentar novamente'
 Check-Images "good page image" @('pagina 8')
+
+# ---- 6.8 Stale drag after a native top-edge resize (regression) ------------
+# Replays a real user action: hover to the top 5 px of the client area, press
+# there, drag up 30 px, release, then move the mouse with NO button. The Wails
+# runtime (@wailsio/runtime drag.js) treats that band as the window's top
+# resize edge, so the press starts a native window resize; the band also
+# belongs to PageView's viewport, so PageView's onPointerDown arms its drag
+# too. The native resize loop swallows the mouseup. Before the fix in
+# PageView (end the drag when no button is pressed / on lostpointercapture),
+# the drag stayed armed and every later no-button mouse move panned the page
+# (raw before/after output in task-7-report.md, fix round 2). This section
+# runs last because it really resizes the window.
+Write-Host "`n=== 6.8: no-button hover after a window resize from the top edge (stale-drag regression) ==="
+Send-Keys "{+}{+}{+}{+}"
+$zr = Get-ZoomPercent $win
+CheckTrue "zoomed in with the keyboard before the resize (>150, page taller than the viewport)" ($zr -gt 150) "zoom=$zr%"
+$vp = Get-Viewport
+$wr0 = [HqReaderCapture]::WindowRect($proc.MainWindowHandle)
+$pressY = $vp.Top + 2
+$c = Get-PageCenter
+Move-CursorPath $c.X ($pressY + 60)
+Move-CursorPath $c.X $pressY
+Start-Sleep -Milliseconds 300
+[HqReaderInteractionsWin32]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep -Milliseconds 100
+for ($i = 1; $i -le 10; $i++) {
+    Move-Cursor $c.X ($pressY - 30 * $i / 10)
+    Start-Sleep -Milliseconds 30
+}
+Start-Sleep -Milliseconds 200
+[HqReaderInteractionsWin32]::mouse_event($MOUSEEVENTF_LEFTUP, 0, 0, 0, [UIntPtr]::Zero)
+Start-Sleep -Milliseconds 800
+$wr1 = [HqReaderCapture]::WindowRect($proc.MainWindowHandle)
+CheckTrue "the press in the top 5 px of the client started a native window resize (window top moved up)" ($wr1.Top -lt $wr0.Top - 10) "press at y=$(R1 $pressY); window top $($wr0.Top) -> $($wr1.Top)"
+$q0 = Get-MarkerStats
+Write-Host "Capture after the resize: $q0"
+$c = Get-PageCenter
+Send-Hover ($c.X - 150) ($c.Y - 40) 0 80
+$q1 = Get-MarkerStats
+Write-Host "Capture after a no-button hover: $q1"
+$qdy = $q1.MeanY - $q0.MeanY; $qdx = $q1.MMeanX - $q0.MMeanX
+CheckTrue "after the top-edge resize, moving the mouse with no button pressed does not move the page (|dx|<=2, |dy|<=2)" (($q1.Count -gt 0) -and ($q1.MCount -gt 0) -and ([math]::Abs($qdy) -le 2) -and ([math]::Abs($qdx) -le 2)) "dy=$(R1 $qdy) dx=$(R1 $qdx)"
 
 Write-Host "`n=== SUMMARY: $global:pass passed, $global:fail failed ==="
 if ($global:fail -gt 0) { exit 1 }

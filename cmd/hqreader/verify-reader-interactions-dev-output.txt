@@ -1,7 +1,7 @@
 ﻿=== Locating hqreader.exe process ===
-PID: 22232
+PID: 15848
 Path: H:\hq-reader-ultimate\.claude\worktrees\etapa-3c-reader-interactions\cmd\hqreader\bin\hqreader.exe
-Parent chain: 22500 (wails3.exe) <- 8052 (cmd.exe) <- 16760 (wails3.exe) <- 7548 (powershell.exe)
+Parent chain: 18128 (wails3.exe) <- 10684 (cmd.exe) <- 12448 (wails3.exe) <- 17296 (powershell.exe)
 Found window: hqreader
 
 === Restoring/foregrounding window (WebView2 exposes no UI Automation descendants while minimized/hidden) ===
@@ -238,4 +238,15 @@ PASS: navigate past the error page -> '8 / 10'
 PASS: placeholder gone on a good page (button 'Tentar novamente' present=False)
 PASS: good page image -> 'pagina 8'
 
-=== SUMMARY: 141 passed, 0 failed ===
+=== 6.8: no-button hover after a window resize from the top edge (stale-drag regression) ===
+PASS: zoomed in with the keyboard before the resize (>150, page taller than the viewport) (zoom=175%)
+PASS: the press in the top 5 px of the client started a native window resize (window top moved up) (press at y=223; 
+window top 190 -> 163)
+Capture after the resize: marker count=26880 meanY=506.5 y=486..527 x=640..1279; vmarker count=23657 meanX=960.0 
+x=940..980; page y=203..823 x=639..1281; region y=203..823 x=518..1401
+Capture after a no-button hover: marker count=26880 meanY=506.5 y=486..527 x=640..1279; vmarker count=23657 
+meanX=960.0 x=940..980; page y=203..823 x=639..1281; region y=203..823 x=518..1401
+PASS: after the top-edge resize, moving the mouse with no button pressed does not move the page (|dx|<=2, |dy|<=2) 
+(dy=0 dx=0)
+
+=== SUMMARY: 144 passed, 0 failed ===
