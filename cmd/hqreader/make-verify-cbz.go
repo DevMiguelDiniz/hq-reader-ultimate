@@ -3,6 +3,10 @@
 // Gera o CBZ sintetico de 10 paginas usado por verify-reader-interactions.ps1
 // e pelas verificacoes manuais da Etapa 3c. Nao faz parte do build.
 //
+// Toda pagina nao corrompida e uma cor solida com uma faixa branca horizontal
+// (40 px, centralizada na vertical, largura total) usada como marcador de
+// posicao; a pagina corrompida (indice 6) sao bytes que nao sao PNG.
+//
 // Uso (de cmd/hqreader): go run make-verify-cbz.go <saida.cbz>
 package main
 
@@ -22,11 +26,25 @@ type page struct {
 	corrupt bool
 }
 
+// Faixa marcadora: branco puro (255,255,255), largura total da pagina,
+// markerHeight px de altura, centralizada na vertical (paginas de 900 px:
+// linhas 430..469). As cores solidas das paginas nunca sao branco puro, entao
+// verify-reader-interactions.ps1 acha a faixa por pixel numa captura da
+// janela e mede o deslocamento vertical do pan mesmo quando a pagina ampliada
+// e mais alta que o viewport (as bordas da pagina somem).
+const markerHeight = 40
+
 func solidPNG(w, h int, c color.RGBA) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	markerTop := (h - markerHeight) / 2
 	for y := 0; y < h; y++ {
+		rowColor := c
+		if y >= markerTop && y < markerTop+markerHeight {
+			rowColor = white
+		}
 		for x := 0; x < w; x++ {
-			img.SetRGBA(x, y, c)
+			img.SetRGBA(x, y, rowColor)
 		}
 	}
 	var buf bytes.Buffer

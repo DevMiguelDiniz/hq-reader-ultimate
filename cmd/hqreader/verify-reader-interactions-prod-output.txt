@@ -1,0 +1,181 @@
+﻿=== Locating hqreader.exe process ===
+PID: 15736
+Path: H:\hq-reader-ultimate\.claude\worktrees\etapa-3c-reader-interactions\cmd\hqreader\bin\hqreader.exe
+Found window: hqreader
+
+=== Restoring/foregrounding window (WebView2 exposes no UI Automation descendants while minimized/hidden) ===
+BoundingRectangle after restore: 510,190,900,700
+
+=== 6.1: initial state ===
+PASS: initial counter -> '1 / 10'
+PASS: initial zoom -> '100'
+PASS: mode button reads 'Pagina unica' (button 'Pagina unica' present=True)
+PASS: initial image -> 'pagina 1'
+Viewport (screen): top=221 bottom=826 height=605 centerY=523.5
+Capture at 100%: marker count=8096 meanY=523.0 y=512..534 x=784..1135; page y=259..787 x=784..1136; region y=230..823 
+x=518..1401
+PASS: marker band visible at 100% (count=8096)
+PASS: page centred vertically in the viewport at 100% (|page centre - viewport centre| <= 2) (page centre=523 viewport 
+centre=523.5 page height=529)
+PASS: marker band sits at the page's vertical centre (|marker meanY - page centre| <= 2) (marker meanY=523 page 
+centre=523)
+
+=== 6.2: keyboard navigation, single mode ===
+PASS: Right arrow -> '2 / 10'
+PASS: Left arrow -> '1 / 10'
+PASS: key d -> '2 / 10'
+PASS: key a -> '1 / 10'
+PASS: Space -> '2 / 10'
+PASS: back to start -> '1 / 10'
+PASS: burst of 5x Right -> '6 / 10'
+PASS: burst of 5x Right leaves exactly the page 6 image -> 'pagina 6'
+PASS: burst of 5x Left -> '1 / 10'
+PASS: burst of 5x Left leaves exactly the page 1 image -> 'pagina 1'
+PASS: Ctrl+Right must NOT navigate -> '1 / 10'
+PASS: Left at first page stays -> '1 / 10'
+PASS: real mouse click on Proxima -> '2 / 10'
+PASS: Space after clicking a button advances exactly one page -> '3 / 10'
+PASS: still exactly one page after a 1s settle (no delayed second advance) -> '3 / 10'
+PASS: back to start again -> '1 / 10'
+
+=== 6.3: keyboard zoom ===
+PASS: key + once -> '115'
+PASS: key - once -> '100'
+PASS: key + twice -> '132'
+PASS: key 0 resets -> '100'
+PASS: key = zooms in -> '115'
+PASS: key 0 resets again -> '100'
+
+=== 6.4: wheel zoom and limits ===
+PASS: 3 notches up zoom in (130..200) (zoom=157%)
+PASS: 3 notches down return near 100 (95..105) (zoom=100%)
+PASS: 14 notches up clamp at 400 -> '400'
+PASS: 10 notches down clamp at 50 -> '50'
+PASS: reset after limits -> '100'
+--- wheel zoom keeps the point under the cursor fixed ---
+PASS: keyboard zoom to 132% before the anchored wheel zoom -> '132'
+Capture before: marker count=14415 meanY=523.0 y=508..538 x=728..1192; page y=230..823 x=727..1193; region y=230..823 
+x=518..1401
+Capture after:  marker count=25789 meanY=453.0 y=433..473 x=646..1274; page y=230..823 x=645..1275; region y=230..823 
+x=518..1401
+PASS: 2 notches up at the cursor: marker moves to cursorY - offset*ratio (+-3 px) (zoom 132% -> 179% cursorY=723 
+marker before=523 after=453 expected=451.8)
+PASS: reset after anchored zoom -> '100'
+
+=== 6.5: pan, clamp, reset on page change, resize while zoomed ===
+--- drag does nothing while the page fits (100% and 50%) ---
+Capture before: marker count=8096 meanY=523.0 y=512..534 x=784..1135; page y=259..787 x=784..1136; region y=230..823 
+x=518..1401
+Capture after:  marker count=8096 meanY=523.0 y=512..534 x=784..1135; page y=259..787 x=784..1136; region y=230..823 
+x=518..1401
+PASS: drag (+80,+50) at 100% does not move the page (|dx|<=2, |dy|<=2) (dx=0 dy=0)
+PASS: zoomed out to the minimum for the drag test -> '50'
+Capture before: marker count=1925 meanY=523.0 y=518..528 x=873..1047; page y=391..655 x=872..1048; region y=230..823 
+x=518..1401
+Capture after:  marker count=1925 meanY=523.0 y=518..528 x=873..1047; page y=391..655 x=872..1048; region y=230..823 
+x=518..1401
+PASS: drag (+80,+50) at 50% does not move the page (|dx|<=2, |dy|<=2) (dx=0 dy=0)
+PASS: reset before the pan test -> '100'
+--- pan while zoomed ---
+PASS: zoomed in for pan test (>150) (zoom=182%)
+Expected vertical pan limit: +-178.9 px (page height at 100%=529, zoom=182%, viewport height=605)
+Capture before drag: marker count=26922 meanY=538.5 y=518..559 x=640..1280; page y=230..823 x=639..1282; region 
+y=230..823 x=518..1401
+PASS: marker visible after zooming in (count=26922)
+Capture after +50 drag: marker count=26922 meanY=588.5 y=568..609 x=640..1280; page y=230..823 x=639..1282; region 
+y=230..823 x=518..1401
+PASS: vertical drag +50 moves the page down ~50 (25..75) (deltaY=50)
+Capture after +600 drag: marker count=26922 meanY=702.5 y=682..723 x=640..1280; page y=230..823 x=639..1282; region 
+y=230..823 x=518..1401
+PASS: huge vertical drag is clamped (total shift >50 and <500) (deltaY=164)
+PASS: clamped at the computed limit: marker at viewport centre + limit (+-4 px) (marker meanY=702.5 expected=702.4)
+PASS: marker still inside the viewport after the clamp (marker y=682..723 viewport=221..826)
+PASS: a further drag down at the limit does not move the page (|dy|<=2) (deltaY=0)
+Capture after -600 drag: marker count=26922 meanY=343.5 y=323..364 x=640..1280; page y=230..823 x=639..1282; region 
+y=230..823 x=518..1401
+PASS: huge drag up is clamped at the opposite limit: marker at viewport centre - limit (+-4 px) (marker meanY=343.5 
+expected=344.6)
+Capture before horizontal drag: marker count=26922 meanY=343.5 y=323..364 x=640..1280; page y=230..823 x=639..1282; 
+region y=230..823 x=518..1401
+Capture after horizontal drag:  marker count=26922 meanY=343.5 y=323..364 x=640..1280; page y=230..823 x=639..1282; 
+region y=230..823 x=518..1401
+PASS: horizontal drag is clamped when the zoomed page is narrower than the viewport (|dx|<=2) (page width=641 viewport 
+width=884 dx(left)=0 dx(right)=0)
+--- resize while zoomed: maximize ---
+Window rect maximized: -8,-8,1936,1096
+Capture maximized: marker count=68742 meanY=542.0 y=509..575 x=447..1472; page y=32..1021 x=446..1473; region 
+y=32..1021 x=0..1919
+PASS: marker still visible after maximize (count=68742)
+PASS: zoom unchanged by maximize -> '182'
+Window rect restored: 510,190,900,700
+Capture restored: marker count=26922 meanY=343.5 y=323..364 x=640..1280; page y=230..823 x=639..1282; region 
+y=230..823 x=518..1401
+PASS: marker still visible after restore (count=26922)
+PASS: zoom unchanged by restore -> '182'
+--- reset on page change ---
+PASS: Proxima while zoomed -> '2 / 10'
+PASS: page change resets zoom to 100 -> '100'
+PASS: page change resets the pan: new page centred (|marker meanY - viewport centre| <= 2) (marker count=8096 
+meanY=523.0 y=512..534 x=784..1135; page y=259..787 x=784..1136; region y=230..823 x=518..1401)
+PASS: Anterior back to first page -> '1 / 10'
+
+=== 6.6: double page mode ===
+PASS: mode button reads 'Pagina dupla' (button 'Pagina dupla' present=True)
+PASS: cover alone -> '1 / 10'
+PASS: cover alone images -> 'pagina 1'
+PASS: pair 2-3 -> '2-3 / 10'
+PASS: pair 2-3 images -> 'pagina 2,pagina 3'
+PASS: page 4 alone (neighbor of spread) -> '4 / 10'
+PASS: page 4 images -> 'pagina 4'
+PASS: page 5 alone (spread) -> '5 / 10'
+PASS: spread image -> 'pagina 5'
+PASS: pair 6-7 (7 is corrupted) -> '6-7 / 10'
+PASS: only page 6 renders as image -> 'pagina 6'
+PASS: page 7 shows the retry button (button 'Tentar novamente' present=True)
+PASS: pair 8-9 -> '8-9 / 10'
+PASS: pair 8-9 images -> 'pagina 8,pagina 9'
+PASS: last page alone -> '10 / 10'
+PASS: last page image -> 'pagina 10'
+PASS: Right at last stays -> '10 / 10'
+PASS: Proxima disabled at the last view (IsEnabled=False)
+PASS: back to pair 8-9 -> '8-9 / 10'
+PASS: back to pair 8-9 images -> 'pagina 8,pagina 9'
+PASS: back to pair 6-7 -> '6-7 / 10'
+PASS: back to pair 6-7 images -> 'pagina 6'
+PASS: back to spread -> '5 / 10'
+PASS: back to spread image -> 'pagina 5'
+PASS: back to page 4 -> '4 / 10'
+PASS: back to page 4 image -> 'pagina 4'
+PASS: back to pair 2-3 -> '2-3 / 10'
+PASS: back to pair 2-3 images -> 'pagina 2,pagina 3'
+PASS: back to cover -> '1 / 10'
+PASS: back to cover image -> 'pagina 1'
+PASS: Anterior disabled at the first view (IsEnabled=False)
+--- toggle back to single from a pair ---
+PASS: to pair 8-9 again -> '8-9 / 10'
+PASS: pair 8-9 images after the burst -> 'pagina 8,pagina 9'
+PASS: zoom in before toggling -> '115'
+PASS: mode button reads 'Pagina unica' (button 'Pagina unica' present=True)
+PASS: single mode keeps first page of the pair -> '8 / 10'
+PASS: single mode shows only page 8 -> 'pagina 8'
+PASS: toggling mode resets zoom -> '100'
+PASS: back to first page -> '1 / 10'
+PASS: first page image -> 'pagina 1'
+
+=== 6.7: per-page error placeholder, single mode ===
+PASS: navigate to the corrupted page -> '7 / 10'
+PASS: retry button present on corrupted page (button 'Tentar novamente' present=True)
+PASS: error message text present (text='Não foi possível carregar esta página')
+PASS: no image for the corrupted page -> ''
+PASS: Anterior still enabled on the error page (IsEnabled=True)
+PASS: Proxima still enabled on the error page (IsEnabled=True)
+PASS: still a placeholder after a real-click retry (page is really corrupt) (button 'Tentar novamente' present=True)
+PASS: counter unchanged after retry -> '7 / 10'
+PASS: still no image for the corrupted page after retry -> ''
+PASS: Anterior still enabled after retry (IsEnabled=True)
+PASS: Proxima still enabled after retry (IsEnabled=True)
+PASS: navigate past the error page -> '8 / 10'
+PASS: placeholder gone on a good page (button 'Tentar novamente' present=False)
+PASS: good page image -> 'pagina 8'
+
+=== SUMMARY: 112 passed, 0 failed ===

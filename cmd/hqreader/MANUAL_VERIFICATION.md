@@ -184,3 +184,64 @@ não lê o atributo `src` do `<img>` byte-a-byte (WebView2/Chromium não expõe
 (`/page/{bookID}/{index}`) é a mesma consequência direta de `goToPage`
 chamando `SetCurrentPage` e a store atualizando `currentPage`, e a
 resposta HTTP em si já tem cobertura em `internal/reader/handler_test.go`.
+
+## Etapa 3c — zoom/pan, modo duplo, atalhos, placeholder de erro, Motion
+
+**Data:** 2026-10-17
+**Cenário:** CBZ sintético de 10 páginas (`make-verify-cbz.go`): capa, retratos,
+um spread (índice 4) e uma página corrompida (índice 6, bytes que não são PNG).
+Cada página não corrompida é uma cor sólida com uma faixa marcadora branca
+pura (40 px, centralizada na vertical, largura total) usada para medir a
+posição da página em pixels.
+
+Script real: `verify-reader-interactions.ps1`. Saída bruta:
+`verify-reader-interactions-dev-output.txt` (wails3 dev, PID 7544),
+`verify-reader-interactions-prod-output.txt` (wails3 build, PID 15736).
+Resultado: `=== SUMMARY: 112 passed, 0 failed ===` e `=== SUMMARY: 112 passed, 0 failed ===`
+(exit code 0 nas duas execuções).
+
+- [x] Navegação por teclado (setas, A/D, Espaço, rajada, Ctrl+→ ignorado, Espaço após clique em botão avança uma página)
+- [x] Zoom por teclado (+, =, -, 0) e por roda, com limites 50% e 400%
+- [x] Zoom pela roda ancorado no ponto sob o cursor (132% → 179% com o cursor 200 px abaixo da faixa: faixa em 453, esperado 451,8)
+- [x] Arrastar move a imagem (eixo vertical), pan limitado ao viewport (limite calculado ±178,9 px a 182%; faixa em 702,5 e 343,5, esperado 702,4 e 344,6)
+- [x] Arrastar não faz nada quando a página cabe (100% e 50%) nem no eixo horizontal quando a página ampliada é mais estreita que o viewport
+- [x] Redimensionar (maximizar/restaurar) com zoom ativo mantém a imagem visível
+- [x] Trocar de página reseta o zoom para 100% (e o pan: a nova página volta centralizada)
+- [x] Modo duplo: capa sozinha, pares, spread sozinho, vizinho do spread sozinho, última página sozinha, ida e volta
+- [x] Alternar o modo mantém a primeira página da visão e reseta o zoom
+- [x] Placeholder de erro (modo único e metade de um par no modo duplo), navegação continua habilitada, "Tentar novamente" funciona sem derrubar a leitura
+- [x] Mesmo comportamento em produção (build embutido)
+
+(Marque cada item com `[x]` somente se as linhas `PASS` correspondentes estão nos dois arquivos de saída.)
+
+**Observações:**
+
+- A geometria das páginas é medida em pixels, não pela árvore de UI
+  Automation. O dump real da árvore mostrou que o `BoundingRectangle` do
+  `Image` `pagina 1` é o retângulo de layout e ignora o `transform` CSS
+  (`783;259;354;529` tanto a 100% quanto a 135%, com a página visivelmente
+  maior na captura). Por isso o script captura a janela com `PrintWindow` e
+  localiza a faixa branca do CBZ; textos, nomes de botões e presença/nome
+  das imagens continuam vindo do UI Automation (contador, zoom e mensagem
+  de erro são, cada um, um único nó `Text`, confirmado no dump).
+- Um "notch" da roda chega ao WebView como `deltaY=100`, então cada notch
+  multiplica o zoom por e^0,15 ≈ 1,1618 (3 notches = 157%, 4 = 182%).
+- Os dois arquivos de saída diferem apenas na linha `PID:`. Todas as
+  verificações e todas as medidas de pixel são iguais em dev e em produção.
+- Além do rascunho do plano, o script também verifica: zoom ancorado no
+  cursor; arrasto sem efeito a 100% e a 50%; o pan para exatamente no
+  limite calculado, nas duas direções; um arrasto extra no limite não move
+  a página; a página volta centralizada ao trocar de página; o modo
+  alternado reseta um zoom de 115% (não só um zoom que já estava em 100%);
+  `Tentar novamente` é clicado com o mouse real e o app continua saudável
+  depois.
+
+**Limitações desta verificação:** a transição de Motion (fade de ~150ms) não é
+observável por UI Automation; o que se verifica é que, depois de navegar, só
+as imagens esperadas existem na árvore (nenhuma imagem antiga presa pela saída
+do fade). O efeito do "Tentar novamente" não é observável aqui (a página está
+realmente corrompida e o placeholder volta); que o clique real chega ao
+`onClick` do botão foi verificado pela execução instrumentada da Task 4
+(fix round 1). O comportamento em WebKitGTK/Linux não foi validado (fora de
+escopo da etapa, spec §10.6). O script observa a UI (UI Automation) e pixels
+capturados da janela; nunca o estado Go diretamente.
