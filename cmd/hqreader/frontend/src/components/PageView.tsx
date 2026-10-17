@@ -143,6 +143,9 @@ export default function PageView() {
   const wide = view.indices.length > 1;
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest("button")) {
+      return;
+    }
     if (e.button !== 0) {
       return;
     }
