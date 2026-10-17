@@ -449,6 +449,21 @@ O prefetch do backend (N±2) deixa as vizinhas em RAM, então o custo esperado �
 pequeno, mas a primeira decisão de pareamento espera o `onLoad` das páginas
 envolvidas antes de renderizar o par.
 
+**Limitação conhecida do pareamento (decisão do plano, a revisar):** os slots
+do modo duplo têm paridade fixa — (2,3), (4,5), ... em páginas 1-based — e um
+spread desfaz só o seu próprio slot, deixando as duas páginas desse slot
+sozinhas. Num quadrinho impresso, porém, um spread ocupa as duas páginas de um
+par e vira uma única imagem, então as imagens seguintes ficam deslocadas em uma
+posição em relação aos pares impressos. Exemplo: capa, (2,3), (4,5), spread na
+imagem 6; a paridade fixa mostra a imagem 7 sozinha e depois (8,9), quando o
+par impresso seria (7,8), (9,10). Os pares seguintes ficam descasados até
+outro spread realinhar. O CBZ sintético de verificação coloca o spread na
+imagem 5, uma posição que não ocorre em impressão, então a verificação não
+exercita este caso. Corrigir exige conhecer a proporção de todas as páginas
+antes de parear (dimensões nos metadados/thumbnails das Etapas 4 e 6) ou uma
+opção manual de 'deslocar em um'; fica adiado e deve ser reavaliado nessas
+etapas.
+
 ### 10.5 Verificação
 
 Mesma política da Etapa 3b: sem framework de teste de frontend. Tudo, incluindo

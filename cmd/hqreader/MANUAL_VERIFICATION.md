@@ -212,7 +212,7 @@ Resultado: `=== SUMMARY: 144 passed, 0 failed ===` e `=== SUMMARY: 144 passed, 0
 - [x] Pan horizontal: a 182% (página de 642,5 px, mais estreita que o viewport de 884 px) arrastar em X não move; a 400% (página de 1412 px) arrastar +100 move +100 e o pan para no limite calculado nas duas direções (±264 px; faixa magenta em 1225 e 697, esperado 1224 e 696)
 - [x] Mover o mouse sem botão pressionado não move a página (depois de um arrasto que terminou fora da janela)
 - [x] Regressão do arrasto preso: depois de redimensionar a janela pela faixa de 5 px do topo da área cliente (clique real, arrasto de 30 px para cima, a janela realmente redimensiona: topo 190 → 163), mover o mouse sem botão não move a página (dy=0, dx=0; antes da correção no PageView: dy=168)
-- [x] Redimensionar com zoom ativo: maximizar mantém o pan (re-limitado a ±269 px; faixa em 344,0, esperado 343,5) e restaurar o re-limita a ±178,9 px (faixa em 343,5, esperado 344,6); a página continua visível nos dois estados
+- [x] Redimensionar com zoom ativo: depois de maximizar e depois de restaurar, a faixa da página continua visível e o zoom não muda; maximizar mantém o pan existente (o limite cresce para ±269 px, então nada é re-limitado; faixa em 344,0, esperado 343,5); ao restaurar, o re-limite (ResizeObserver -> `setMetrics` -> `clampPan`, ±178,9 px) moveria a página cerca de 1,1 px (pan -180 -> -178,9; faixa em 343,5, esperado 344,6), dentro da tolerância de ±4 px, então a medida é consistente com o re-limite mas não o distingue de "nada mudou". O re-limite em si é verificado apenas pela leitura do código de `setMetrics`/`clampPan` em `readerStore.ts` e `viewTransform.ts`
 - [x] Trocar de página (botão ou seta) reseta o zoom para 100% e o pan nos dois eixos: a nova página volta centralizada
 - [x] Modo duplo: capa sozinha, pares, spread sozinho, vizinho do spread sozinho, última página sozinha, ida e volta
 - [x] Alternar o modo (único → duplo na capa e duplo → único a partir do par 8-9) mantém a primeira página da visão e reseta zoom e pan (a página fica centralizada nos dois casos)
@@ -255,7 +255,8 @@ Resultado: `=== SUMMARY: 144 passed, 0 failed ===` e `=== SUMMARY: 144 passed, 0
 **Limitações desta verificação:** a transição de Motion (fade de ~150ms) não é
 observável por UI Automation; o que se verifica é que, depois de navegar, só
 as imagens esperadas existem na árvore (nenhuma imagem antiga presa pela saída
-do fade). O efeito do "Tentar novamente" não é observável aqui (a página está
+do fade). O caminho de `prefers-reduced-motion` do fade de Motion (duração
+0) não foi observado no app nativo. O efeito do "Tentar novamente" não é observável aqui (a página está
 realmente corrompida e o placeholder volta); que o clique real chega ao
 `onClick` do botão foi verificado pela execução instrumentada da Task 4
 (fix round 1). O comportamento em WebKitGTK/Linux não foi validado (fora de
