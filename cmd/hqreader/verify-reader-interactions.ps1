@@ -20,7 +20,10 @@ HQREADER_BOOK. Indices 0-based: 0 capa, 4 spread (paisagem), 6 corrompida.
 Visoes no modo duplo: [0] [1,2] [3] [4] [5,6] [7,8] [9]. Toda pagina nao
 corrompida e uma cor solida com uma FAIXA MARCADORA branca pura
 (255,255,255), largura total, 40 px de altura, centralizada na vertical
-(linhas 430..469 das paginas de 900 px).
+(linhas 430..469 das paginas de 900 px), e uma faixa vertical magenta pura
+(255,0,255), altura total, 40 px de largura, centralizada na horizontal
+(colunas 280..319 das paginas de 600 px). A branca mede o pan vertical, a
+magenta o horizontal.
 
 O que o script le na arvore de UI Automation (cada dado e UM no de texto;
 confirmado num dump real da arvore antes de escrever o script):
@@ -41,7 +44,8 @@ pagina, pan limitado, arrasto sem efeito quando a pagina cabe, pagina visivel
 depois de maximizar/restaurar, zoom ancorado no cursor) e medida em pixels
 de uma captura PrintWindow da janela: Get-MarkerStats acha os pixels brancos
 da faixa marcadora (todos os canais >= 250; o fundo e rgb(23,23,23) e as
-cores das paginas nunca sao brancas) e os pixels de pagina (diferentes do
+cores das paginas nunca sao brancas), os pixels magenta (R,B >= 250, G <= 5;
+nenhuma cor de pagina tem R=255) e os pixels de pagina (diferentes do
 fundo), dentro da regiao do viewport.
 
 Fatos medidos no app real que as contas abaixo usam:
@@ -107,14 +111,18 @@ public class HqReaderMarkerStats {
     public int Count;            // pixels brancos (faixa marcadora)
     public double MeanY;         // Y medio dos pixels brancos (tela)
     public int MinX, MaxX, MinY, MaxY;          // extensao dos pixels brancos
+    public int MCount;           // pixels magenta (faixa vertical)
+    public double MMeanX;        // X medio dos pixels magenta (tela)
+    public int MMinX, MMaxX;
     public int PageCount;        // pixels de pagina (nao-fundo)
     public int PageMinX, PageMaxX, PageMinY, PageMaxY;
     public int RegionLeft, RegionTop, RegionRight, RegionBottom;
     public override string ToString() {
-        if (Count == 0) { return String.Format(System.Globalization.CultureInfo.InvariantCulture, "marker count=0, page y={0}..{1} x={2}..{3}, region y={4}..{5}", PageMinY, PageMaxY, PageMinX, PageMaxX, RegionTop, RegionBottom); }
-        return String.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "marker count={0} meanY={1:0.0} y={2}..{3} x={4}..{5}; page y={6}..{7} x={8}..{9}; region y={10}..{11} x={12}..{13}",
-            Count, MeanY, MinY, MaxY, MinX, MaxX, PageMinY, PageMaxY, PageMinX, PageMaxX, RegionTop, RegionBottom, RegionLeft, RegionRight);
+        System.Globalization.CultureInfo ic = System.Globalization.CultureInfo.InvariantCulture;
+        string w = Count == 0 ? "marker count=0" : String.Format(ic, "marker count={0} meanY={1:0.0} y={2}..{3} x={4}..{5}", Count, MeanY, MinY, MaxY, MinX, MaxX);
+        string m = MCount == 0 ? "vmarker count=0" : String.Format(ic, "vmarker count={0} meanX={1:0.0} x={2}..{3}", MCount, MMeanX, MMinX, MMaxX);
+        return String.Format(ic, "{0}; {1}; page y={2}..{3} x={4}..{5}; region y={6}..{7} x={8}..{9}",
+            w, m, PageMinY, PageMaxY, PageMinX, PageMaxX, RegionTop, RegionBottom, RegionLeft, RegionRight);
     }
 }
 public class HqReaderCapture {
@@ -129,8 +137,8 @@ public class HqReaderCapture {
         RECT r; GetWindowRect(hwnd, out r);
         int w = r.Right - r.Left, h = r.Bottom - r.Top;
         HqReaderMarkerStats s = new HqReaderMarkerStats();
-        s.MinX = s.MinY = s.PageMinX = s.PageMinY = int.MaxValue;
-        s.MaxX = s.MaxY = s.PageMaxX = s.PageMaxY = int.MinValue;
+        s.MinX = s.MinY = s.PageMinX = s.PageMinY = s.MMinX = int.MaxValue;
+        s.MaxX = s.MaxY = s.PageMaxX = s.PageMaxY = s.MMaxX = int.MinValue;
         int x0 = Math.Max(0, left - r.Left), x1 = Math.Min(w, right - r.Left);
         int y0 = Math.Max(0, top - r.Top), y1 = Math.Min(h, bottom - r.Top);
         s.RegionLeft = x0 + r.Left; s.RegionRight = x1 + r.Left - 1;
@@ -146,7 +154,7 @@ public class HqReaderCapture {
             Marshal.Copy(d.Scan0, buf, 0, buf.Length);
             int stride = d.Stride;
             bmp.UnlockBits(d);
-            double sumY = 0;
+            double sumY = 0, sumMX = 0;
             for (int y = y0; y < y1; y++) {
                 int row = y * stride;
                 for (int x = x0; x < x1; x++) {
@@ -158,6 +166,11 @@ public class HqReaderCapture {
                         if (sx < s.MinX) s.MinX = sx; if (sx > s.MaxX) s.MaxX = sx;
                         if (sy < s.MinY) s.MinY = sy; if (sy > s.MaxY) s.MaxY = sy;
                     }
+                    // faixa vertical magenta (255,0,255): nenhuma cor de pagina tem R=255
+                    if (rr >= 250 && gg <= 5 && b >= 250) {
+                        s.MCount++; sumMX += sx;
+                        if (sx < s.MMinX) s.MMinX = sx; if (sx > s.MMaxX) s.MMaxX = sx;
+                    }
                     // fundo do app: rgb(23,23,23) (bg-neutral-900)
                     if (Math.Abs(rr - 23) > 12 || Math.Abs(gg - 23) > 12 || Math.Abs(b - 23) > 12) {
                         s.PageCount++;
@@ -167,6 +180,7 @@ public class HqReaderCapture {
                 }
             }
             if (s.Count > 0) { s.MeanY = sumY / s.Count; }
+            if (s.MCount > 0) { s.MMeanX = sumMX / s.MCount; }
         }
         return s;
     }
@@ -351,6 +365,8 @@ function Get-Viewport() {
     $bottom = [double]$b.Y - 12
     return @{
         Left = [double]$d.X; Right = [double]($d.X + $d.Width)
+        Width = [double]$d.Width; CenterX = [double]($d.X + $d.Width / 2)
+        DocHeight = [double]$d.Height
         Top = $top; Bottom = $bottom
         Height = $bottom - $top; CenterY = ($top + $bottom) / 2
     }
@@ -385,6 +401,16 @@ function Get-MarkerStats() {
     return $s
 }
 
+# Pan zero = pagina centralizada: a faixa branca (centro vertical da pagina)
+# no centro vertical do viewport e a faixa magenta (centro horizontal) no
+# centro horizontal, cada uma com tolerancia de 2 px.
+function Check-PageCentred($label) {
+    $vpc = Get-Viewport
+    $st = Get-MarkerStats
+    $ok = ($st.Count -gt 0) -and ($st.MCount -gt 0) -and ([math]::Abs($st.MeanY - $vpc.CenterY) -le 2) -and ([math]::Abs($st.MMeanX - $vpc.CenterX) -le 2)
+    CheckTrue $label $ok "marker meanY=$(R1 $st.MeanY) vs viewport centre Y=$(R1 $vpc.CenterY); vmarker meanX=$(R1 $st.MMeanX) vs viewport centre X=$(R1 $vpc.CenterX)"
+}
+
 # ---- Real input helpers ---------------------------------------------------
 
 # Parametros TIPADOS de proposito: sem tipo, um argumento negativo escrito
@@ -395,8 +421,41 @@ function Move-Cursor([double]$x, [double]$y) {
     [HqReaderInteractionsWin32]::SetCursorPos([int]$x, [int]$y) | Out-Null
 }
 
+# Leva o cursor ate (x,y) em 10 passos a partir da posicao atual, como uma
+# mao faria, em vez de teletransportar. Isto importa: o runtime do Wails
+# (@wailsio/runtime drag.js) guarda uma "borda de redimensionamento" a cada
+# mousemove (clientY < 5 => "n-resize", inclusive clientY negativo durante um
+# arrasto capturado que sai da janela por cima) e so a limpa no proximo
+# mousemove longe das bordas. Se o cursor salta de volta para a pagina e
+# aperta sem nenhum mousemove no caminho, o Wails trata o clique como inicio
+# de um redimensionamento nativo da janela, que engole o mouseup, e o
+# PageView fica com o arrasto armado (a pagina passa a seguir o cursor sem
+# botao). Isso e um defeito real do app, alcancavel por uma pessoa
+# (redimensionar a janela pela borda superior, faixa de 5 px que pertence ao
+# viewport do PageView) e esta reportado em task-7-report.md; este script nao
+# o testa (falharia de proposito) e evita disparar o caminho sintetico.
+function Move-CursorPath([double]$x, [double]$y) {
+    $p = [System.Windows.Forms.Cursor]::Position
+    $steps = 10
+    for ($i = 1; $i -le $steps; $i++) {
+        Move-Cursor ($p.X + ($x - $p.X) * $i / $steps) ($p.Y + ($y - $p.Y) * $i / $steps)
+        Start-Sleep -Milliseconds 20
+    }
+}
+
+# Move o cursor SEM botao de (x,y) por (dx,dy), em passos.
+function Send-Hover([double]$x, [double]$y, [double]$dx, [double]$dy) {
+    Move-CursorPath $x $y
+    $steps = 10
+    for ($i = 1; $i -le $steps; $i++) {
+        Move-Cursor ($x + $dx * $i / $steps) ($y + $dy * $i / $steps)
+        Start-Sleep -Milliseconds 30
+    }
+    Start-Sleep -Milliseconds 400
+}
+
 function Click-At([double]$x, [double]$y) {
-    Move-Cursor $x $y
+    Move-CursorPath $x $y
     Start-Sleep -Milliseconds 80
     [HqReaderInteractionsWin32]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 60
@@ -413,7 +472,7 @@ function Click-Button($parent, $name) {
 
 # notches > 0 = wheel up (zoom in), < 0 = wheel down (zoom out).
 function Send-Wheel([double]$x, [double]$y, [int]$notches) {
-    Move-Cursor $x $y
+    Move-CursorPath $x $y
     Start-Sleep -Milliseconds 80
     $delta = if ($notches -ge 0) { 120 } else { -120 }
     for ($i = 0; $i -lt [math]::Abs($notches); $i++) {
@@ -424,7 +483,7 @@ function Send-Wheel([double]$x, [double]$y, [int]$notches) {
 }
 
 function Send-Drag([double]$x, [double]$y, [double]$dx, [double]$dy) {
-    Move-Cursor $x $y
+    Move-CursorPath $x $y
     Start-Sleep -Milliseconds 100
     [HqReaderInteractionsWin32]::mouse_event($MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 100
@@ -462,6 +521,19 @@ if ($ProcessId -gt 0) {
 }
 Write-Host "PID: $($proc.Id)"
 Write-Host "Path: $($proc.Path)"
+# So informativo (nenhuma checagem depende disto): a cadeia de processos pais
+# distingue uma execucao sob `wails3 dev` de uma do binario de producao
+# iniciado direto do shell.
+$chain = @()
+$cur = Get-CimInstance Win32_Process -Filter "ProcessId=$($proc.Id)" -ErrorAction SilentlyContinue
+for ($k = 0; $k -lt 4 -and $cur; $k++) {
+    $parentId = $cur.ParentProcessId
+    $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$parentId" -ErrorAction SilentlyContinue
+    if (-not $parent) { $chain += "$parentId (exited)"; break }
+    $chain += "$parentId ($($parent.Name))"
+    $cur = $parent
+}
+Write-Host "Parent chain: $($chain -join ' <- ')"
 
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $proc.Id)
@@ -500,6 +572,15 @@ $page100H = $s.PageMaxY - $s.PageMinY + 1
 $pageCenter100 = ($s.PageMinY + $s.PageMaxY) / 2
 CheckTrue "page centred vertically in the viewport at 100% (|page centre - viewport centre| <= 2)" ([math]::Abs($pageCenter100 - $vp.CenterY) -le 2) "page centre=$(R1 $pageCenter100) viewport centre=$(R1 $vp.CenterY) page height=$page100H"
 CheckTrue "marker band sits at the page's vertical centre (|marker meanY - page centre| <= 2)" ([math]::Abs($s.MeanY - $pageCenter100) -le 2) "marker meanY=$(R1 $s.MeanY) page centre=$(R1 $pageCenter100)"
+$page100W = $s.PageMaxX - $s.PageMinX + 1
+$pageCenterX100 = ($s.PageMinX + $s.PageMaxX) / 2
+CheckTrue "page centred horizontally in the viewport at 100% (|page centre X - viewport centre X| <= 2)" ([math]::Abs($pageCenterX100 - $vp.CenterX) -le 2) "page centre X=$(R1 $pageCenterX100) viewport centre X=$(R1 $vp.CenterX) page width=$page100W viewport width=$(R1 $vp.Width)"
+CheckTrue "vertical (magenta) marker sits at the page's horizontal centre (|meanX - page centre X| <= 2)" (($s.MCount -gt 0) -and ([math]::Abs($s.MMeanX - $pageCenterX100) -le 2)) "vmarker meanX=$(R1 $s.MMeanX) count=$($s.MCount)"
+# The page <img> is `max-h-[80vh]` (90vw is not the binding limit for a 2:3
+# page), so its height at 100% is 80% of the document height. The maximize
+# check in 6.5 relies on this rule to predict the page size in a viewport
+# where it cannot be measured, so verify it here where it can.
+CheckTrue "page height at 100% is 80% of the document height (max-h-[80vh]) (+-1.5 px)" ([math]::Abs($page100H - 0.8 * $vp.DocHeight) -le 1.5) "page height=$page100H 0.8*document height=$(R1 (0.8 * $vp.DocHeight))"
 
 # ---- 6.2 Keyboard navigation (single mode) --------------------------------
 Write-Host "`n=== 6.2: keyboard navigation, single mode ==="
@@ -586,17 +667,18 @@ Send-Drag $c.X $c.Y 80 50
 $sB = Get-MarkerStats
 Write-Host "Capture before: $sA"
 Write-Host "Capture after:  $sB"
-$dy = $sB.MeanY - $sA.MeanY; $dx = $sB.MinX - $sA.MinX
-CheckTrue "drag (+80,+50) at 100% does not move the page (|dx|<=2, |dy|<=2)" (($sB.Count -gt 0) -and ([math]::Abs($dy) -le 2) -and ([math]::Abs($dx) -le 2)) "dx=$dx dy=$(R1 $dy)"
+$dy = $sB.MeanY - $sA.MeanY; $dx = $sB.MMeanX - $sA.MMeanX
+CheckTrue "drag (+80,+50) at 100% does not move the page (|dx|<=2, |dy|<=2)" (($sB.Count -gt 0) -and ($sB.MCount -gt 0) -and ([math]::Abs($dy) -le 2) -and ([math]::Abs($dx) -le 2)) "dx=$(R1 $dx) dy=$(R1 $dy)"
 Send-Wheel $c.X $c.Y -10
 Check-Zoom "zoomed out to the minimum for the drag test" 50
+Check-PageCentred "below 100% (at 50%) the page stays centred in the viewport"
 $sA = Get-MarkerStats
 Send-Drag $c.X $c.Y 80 50
 $sB = Get-MarkerStats
 Write-Host "Capture before: $sA"
 Write-Host "Capture after:  $sB"
-$dy = $sB.MeanY - $sA.MeanY; $dx = $sB.MinX - $sA.MinX
-CheckTrue "drag (+80,+50) at 50% does not move the page (|dx|<=2, |dy|<=2)" (($sB.Count -gt 0) -and ([math]::Abs($dy) -le 2) -and ([math]::Abs($dx) -le 2)) "dx=$dx dy=$(R1 $dy)"
+$dy = $sB.MeanY - $sA.MeanY; $dx = $sB.MMeanX - $sA.MMeanX
+CheckTrue "drag (+80,+50) at 50% does not move the page (|dx|<=2, |dy|<=2)" (($sB.Count -gt 0) -and ($sB.MCount -gt 0) -and ([math]::Abs($dy) -le 2) -and ([math]::Abs($dx) -le 2)) "dx=$(R1 $dx) dy=$(R1 $dy)"
 Send-Keys "0"
 Check-Zoom "reset before the pan test" 100
 
@@ -639,44 +721,119 @@ Write-Host "Capture after -600 drag: $r4"
 $expectedUp = $vp.CenterY - $maxPanY
 CheckTrue "huge drag up is clamped at the opposite limit: marker at viewport centre - limit (+-4 px)" (($r4.Count -gt 0) -and ([math]::Abs($r4.MeanY - $expectedUp) -le 4)) "marker meanY=$(R1 $r4.MeanY) expected=$(R1 $expectedUp)"
 
+# The -600 drag ended with the cursor above the window. Moving back over the
+# page with NO button pressed must not move it (Send-Hover walks there in
+# steps from the top of the screen, then 80 px down).
+Send-Hover ($c.X - 150) ($c.Y - 40) 0 80
+$r5 = Get-MarkerStats
+Write-Host "Capture after a no-button hover: $r5"
+CheckTrue "moving the mouse with no button pressed does not move the page (|dx|<=2, |dy|<=2)" (($r5.Count -gt 0) -and ([math]::Abs($r5.MeanY - $r4.MeanY) -le 2) -and ([math]::Abs($r5.MMeanX - $r4.MMeanX) -le 2)) "dy=$(R1 ($r5.MeanY - $r4.MeanY)) dx=$(R1 ($r5.MMeanX - $r4.MMeanX))"
+
+Write-Host "--- horizontal drag while the zoomed page is narrower than the viewport ---"
+# clampPan: |pan.x| <= max(0, (content width * zoom - viewport width) / 2).
+$zoomedW = $page100W * $zoomed / 100
+CheckTrue "at $zoomed% the page is narrower than the viewport, so the horizontal pan limit is 0" ($zoomedW -lt $vp.Width) "page width=$(R1 $zoomedW) viewport width=$(R1 $vp.Width)"
 $rx0 = Get-MarkerStats
 Send-Drag $c.X $c.Y 100 0
 $rx1 = Get-MarkerStats
 Write-Host "Capture before horizontal drag: $rx0"
 Write-Host "Capture after horizontal drag:  $rx1"
-$markerW = $rx0.MaxX - $rx0.MinX + 1
-$regionW = $rx0.RegionRight - $rx0.RegionLeft + 1
-$dxMin = $rx1.MinX - $rx0.MinX; $dxMax = $rx1.MaxX - $rx0.MaxX
-if ($markerW -lt $regionW - 4) {
-    CheckTrue "horizontal drag is clamped when the zoomed page is narrower than the viewport (|dx|<=2)" (($rx1.Count -gt 0) -and ([math]::Abs($dxMin) -le 2) -and ([math]::Abs($dxMax) -le 2)) "page width=$markerW viewport width=$regionW dx(left)=$dxMin dx(right)=$dxMax"
-} else {
-    CheckTrue "horizontal drag is clamped: the wider-than-viewport page still covers it" (($rx1.MinX -le $rx1.RegionLeft + 1) -and ($rx1.MaxX -ge $rx1.RegionRight - 1)) "page x=$($rx1.MinX)..$($rx1.MaxX) region x=$($rx1.RegionLeft)..$($rx1.RegionRight)"
-}
+$dxm = $rx1.MMeanX - $rx0.MMeanX
+CheckTrue "horizontal drag +100 does not move the narrower page (|dx|<=2)" (($rx1.MCount -gt 0) -and ([math]::Abs($dxm) -le 2)) "vmarker meanX before=$(R1 $rx0.MMeanX) after=$(R1 $rx1.MMeanX)"
 
 Write-Host "--- resize while zoomed: maximize ---"
+# Expected position (first principles): the page <img> is max-h-[80vh]
+# (checked in 6.1), so in any window its height at 100% is 0.8 * document
+# height; the vertical pan limit is (that * zoom - viewport height) / 2; the
+# pan (CSS px, here = screen px) is kept unless it exceeds the new limit, in
+# which case setMetrics re-clamps it; the marker (page centre) sits at
+# viewport centre + pan. Restoring applies the same rule to the small window.
+$vpPre = Get-Viewport
+$panPre = $rx1.MeanY - $vpPre.CenterY
+Write-Host "Pan before maximize: $(R1 $panPre) px (marker $(R1 $rx1.MeanY) - viewport centre $(R1 $vpPre.CenterY))"
 [HqReaderInteractionsWin32]::ShowWindow($proc.MainWindowHandle, 3) | Out-Null   # SW_MAXIMIZE
 Start-Sleep -Milliseconds 1500
 Write-Host "Window rect maximized: $($win.Current.BoundingRectangle)"
+$vpM = Get-Viewport
+Write-Host "Viewport maximized (screen): top=$(R1 $vpM.Top) bottom=$(R1 $vpM.Bottom) height=$(R1 $vpM.Height) centerY=$(R1 $vpM.CenterY) document height=$(R1 $vpM.DocHeight)"
 $sm = Get-MarkerStats
 Write-Host "Capture maximized: $sm"
 CheckTrue "marker still visible after maximize" ($sm.Count -gt 0) "count=$($sm.Count)"
 Check-Zoom "zoom unchanged by maximize" $zoomed
+$limitM = (0.8 * $vpM.DocHeight * $zoomed / 100 - $vpM.Height) / 2
+$panM = [math]::Max(-$limitM, [math]::Min($limitM, $panPre))
+$expM = $vpM.CenterY + $panM
+CheckTrue "maximized: marker at viewport centre + pan re-clamped to the new limit (+-4 px)" ([math]::Abs($sm.MeanY - $expM) -le 4) "limit=+-$(R1 $limitM) (0.8*$(R1 $vpM.DocHeight)*$zoomed% - $(R1 $vpM.Height))/2, pan=$(R1 $panM), expected=$(R1 $expM), marker meanY=$(R1 $sm.MeanY)"
 [HqReaderInteractionsWin32]::ShowWindow($proc.MainWindowHandle, 9) | Out-Null   # SW_RESTORE
 Start-Sleep -Milliseconds 1500
 Write-Host "Window rect restored: $($win.Current.BoundingRectangle)"
+$vpR = Get-Viewport
 $sr = Get-MarkerStats
 Write-Host "Capture restored: $sr"
 CheckTrue "marker still visible after restore" ($sr.Count -gt 0) "count=$($sr.Count)"
 Check-Zoom "zoom unchanged by restore" $zoomed
+$limitR = ($page100H * $zoomed / 100 - $vpR.Height) / 2
+$panR = [math]::Max(-$limitR, [math]::Min($limitR, $panM))
+$expR = $vpR.CenterY + $panR
+CheckTrue "restored: marker at viewport centre + pan re-clamped to the smaller limit (+-4 px)" ([math]::Abs($sr.MeanY - $expR) -le 4) "limit=+-$(R1 $limitR), pan=$(R1 $panR), expected=$(R1 $expR), marker meanY=$(R1 $sr.MeanY)"
+
+Write-Host "--- horizontal pan on a page wider than the viewport (400%) ---"
+# The page edges never enter the viewport (that is what the clamp does), so
+# horizontal position is read from the vertical magenta marker at the page's
+# horizontal centre: meanX = viewport centre X + pan.x.
+Send-Keys "0"
+Check-Zoom "reset before the 400% test" 100
+Send-Wheel $c.X $c.Y 14
+Check-Zoom "wheel up to the 400% limit" 400
+$vp = Get-Viewport
+$maxPanX = ($page100W * 4 - $vp.Width) / 2
+Write-Host "Expected horizontal pan limit: +-$(R1 $maxPanX) px (page width at 100%=$page100W, zoom=400%, viewport width=$(R1 $vp.Width))"
+CheckTrue "at 400% the page is wider than the viewport (horizontal limit > 0)" ($maxPanX -gt 50) "page width=$(4 * $page100W) viewport width=$(R1 $vp.Width)"
+$h0 = Get-MarkerStats
+Write-Host "Capture at 400%: $h0"
+CheckTrue "vertical marker at the viewport centre before the horizontal drags (|meanX - centre X| <= 2)" (($h0.MCount -gt 0) -and ([math]::Abs($h0.MMeanX - $vp.CenterX) -le 2)) "vmarker meanX=$(R1 $h0.MMeanX) viewport centre X=$(R1 $vp.CenterX)"
+Send-Drag $c.X $c.Y 100 0
+$h1 = Get-MarkerStats
+Write-Host "Capture after +100 horizontal drag: $h1"
+$hdx1 = $h1.MMeanX - $h0.MMeanX
+CheckTrue "horizontal drag +100 moves the wider page right ~100 (75..125)" (($h1.MCount -gt 0) -and ($hdx1 -ge 75) -and ($hdx1 -le 125)) "deltaX=$(R1 $hdx1)"
+Send-Drag $c.X $c.Y 600 0
+$h2 = Get-MarkerStats
+Write-Host "Capture after +600 horizontal drag: $h2"
+$expRight = $vp.CenterX + $maxPanX
+CheckTrue "huge drag right is clamped at the computed limit: vertical marker at viewport centre X + limit (+-4 px)" (($h2.MCount -gt 0) -and ([math]::Abs($h2.MMeanX - $expRight) -le 4)) "vmarker meanX=$(R1 $h2.MMeanX) expected=$(R1 $expRight)"
+CheckTrue "vertical marker still inside the viewport after the clamp" (($h2.MMinX -ge $vp.Left) -and ($h2.MMaxX -le $vp.Right)) "vmarker x=$($h2.MMinX)..$($h2.MMaxX) viewport=$(R1 $vp.Left)..$(R1 $vp.Right)"
+Send-Drag $c.X $c.Y 200 0
+$h3 = Get-MarkerStats
+CheckTrue "a further drag right at the limit does not move the page (|dx|<=2)" ([math]::Abs($h3.MMeanX - $h2.MMeanX) -le 2) "deltaX=$(R1 ($h3.MMeanX - $h2.MMeanX))"
+Send-Drag $c.X $c.Y -900 0
+$h4 = Get-MarkerStats
+Write-Host "Capture after -900 horizontal drag: $h4"
+$expLeft = $vp.CenterX - $maxPanX
+CheckTrue "huge drag left is clamped at the opposite limit: vertical marker at viewport centre X - limit (+-4 px)" (($h4.MCount -gt 0) -and ([math]::Abs($h4.MMeanX - $expLeft) -le 4)) "vmarker meanX=$(R1 $h4.MMeanX) expected=$(R1 $expLeft)"
 
 Write-Host "--- reset on page change ---"
 Invoke-ByName $win 'Proxima'
 Check-Counter "Proxima while zoomed" "2 / 10"
 Check-Zoom "page change resets zoom to 100" 100
-$sp = Get-MarkerStats
-CheckTrue "page change resets the pan: new page centred (|marker meanY - viewport centre| <= 2)" (($sp.Count -gt 0) -and ([math]::Abs($sp.MeanY - (Get-Viewport).CenterY) -le 2)) "$sp"
+Check-PageCentred "page change resets the pan in both axes: new page centred"
 Invoke-ByName $win 'Anterior'
 Check-Counter "Anterior back to first page" "1 / 10"
+
+Write-Host "--- arrow keys keep navigating while zoomed ---"
+Send-Wheel $c.X $c.Y 4
+$zk = Get-ZoomPercent $win
+CheckTrue "zoomed in before the arrow key (>150)" ($zk -gt 150) "zoom=$zk%"
+Send-Drag $c.X $c.Y 0 100
+$sk = Get-MarkerStats
+$vp = Get-Viewport
+CheckTrue "page panned before the arrow key (marker > 50 px from the viewport centre)" (($sk.Count -gt 0) -and ([math]::Abs($sk.MeanY - $vp.CenterY) -gt 50)) "marker meanY=$(R1 $sk.MeanY) viewport centre=$(R1 $vp.CenterY)"
+Send-Keys "{RIGHT}"
+Check-Counter "real Right arrow while zoomed advances exactly one page" "2 / 10"
+Check-Zoom "page change by arrow key resets zoom" 100
+Check-PageCentred "page change by arrow key resets the pan: new page centred"
+Send-Keys "{LEFT}"
+Check-Counter "Left arrow back to first page" "1 / 10"
 
 # ---- 6.6 Double page mode --------------------------------------------------
 # The store ignores next/prev while a double view is pending (a page of the
@@ -684,8 +841,18 @@ Check-Counter "Anterior back to first page" "1 / 10"
 # view's images only after the old one's 75ms exit, so every key in double
 # mode waits for the expected images (Check-Images) before the next key.
 Write-Host "`n=== 6.6: double page mode ==="
+Write-Host "--- toggling the mode resets zoom AND pan (single -> double) ---"
+Send-Wheel $c.X $c.Y 4
+$zt = Get-ZoomPercent $win
+CheckTrue "zoomed in before toggling (>150)" ($zt -gt 150) "zoom=$zt%"
+Send-Drag $c.X $c.Y 0 100
+$st0 = Get-MarkerStats
+$vp = Get-Viewport
+CheckTrue "page panned before toggling (marker > 50 px from the viewport centre)" (($st0.Count -gt 0) -and ([math]::Abs($st0.MeanY - $vp.CenterY) -gt 50)) "marker meanY=$(R1 $st0.MeanY) viewport centre=$(R1 $vp.CenterY)"
 Send-Keys "m"
 Check-ButtonPresent "mode button reads 'Pagina dupla'" 'Pagina dupla'
+Check-Zoom "toggling to double resets zoom" 100
+Check-PageCentred "toggling to double resets the pan: cover centred"
 Check-Counter "cover alone" "1 / 10"
 Check-Images "cover alone images" @('pagina 1')
 Send-Keys "{RIGHT}"; Check-Counter "pair 2-3" "2-3 / 10"
@@ -722,12 +889,21 @@ Write-Host "--- toggle back to single from a pair ---"
 # pending: the burst cannot be dropped by the pending guard (Decision 8).
 Send-Keys "{RIGHT 5}"; Check-Counter "to pair 8-9 again" "8-9 / 10"
 Check-Images "pair 8-9 images after the burst" @('pagina 8', 'pagina 9')
-Send-Keys "{+}"; Check-Zoom "zoom in before toggling" 115
+# Pan the pair (two 2:3 pages side by side, same height as a single page),
+# then toggle: zoom and pan must both reset.
+Send-Wheel $c.X $c.Y 4
+$zt = Get-ZoomPercent $win
+CheckTrue "zoomed in on the pair before toggling (>150)" ($zt -gt 150) "zoom=$zt%"
+Send-Drag $c.X $c.Y 0 100
+$st1 = Get-MarkerStats
+$vp = Get-Viewport
+CheckTrue "pair panned before toggling (marker > 50 px from the viewport centre)" (($st1.Count -gt 0) -and ([math]::Abs($st1.MeanY - $vp.CenterY) -gt 50)) "marker meanY=$(R1 $st1.MeanY) viewport centre=$(R1 $vp.CenterY)"
 Send-Keys "m"
 Check-ButtonPresent "mode button reads 'Pagina unica'" 'Pagina unica'
 Check-Counter "single mode keeps first page of the pair" "8 / 10"
 Check-Images "single mode shows only page 8" @('pagina 8')
 Check-Zoom "toggling mode resets zoom" 100
+Check-PageCentred "toggling back to single resets the pan: page 8 centred"
 Send-Keys "{LEFT 7}"; Check-Counter "back to first page" "1 / 10"
 Check-Images "first page image" @('pagina 1')
 

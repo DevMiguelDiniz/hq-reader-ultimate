@@ -4,8 +4,10 @@
 // e pelas verificacoes manuais da Etapa 3c. Nao faz parte do build.
 //
 // Toda pagina nao corrompida e uma cor solida com uma faixa branca horizontal
-// (40 px, centralizada na vertical, largura total) usada como marcador de
-// posicao; a pagina corrompida (indice 6) sao bytes que nao sao PNG.
+// (40 px, centralizada na vertical, largura total) e uma faixa magenta
+// vertical (40 px, centralizada na horizontal, altura total) usadas como
+// marcadores de posicao; a pagina corrompida (indice 6) sao bytes que nao
+// sao PNG.
 //
 // Uso (de cmd/hqreader): go run make-verify-cbz.go <saida.cbz>
 package main
@@ -34,17 +36,31 @@ type page struct {
 // e mais alta que o viewport (as bordas da pagina somem).
 const markerHeight = 40
 
+// Faixa marcadora vertical: magenta puro (255,0,255), altura total da pagina,
+// markerWidth px de largura, centralizada na horizontal (paginas de 600 px:
+// colunas 280..319; spread de 1200 px: colunas 580..619). Na intersecao com a
+// faixa branca vale o branco, entao a faixa branca continua de ponta a ponta.
+// Nenhuma cor de pagina tem R=255, entao o magenta e inequivoco; com ele o
+// script mede o pan HORIZONTAL quando a pagina ampliada e mais larga que o
+// viewport (as bordas laterais nunca entram no viewport por causa do clamp).
+const markerWidth = 40
+
 func solidPNG(w, h int, c color.RGBA) []byte {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	magenta := color.RGBA{R: 255, G: 0, B: 255, A: 255}
 	markerTop := (h - markerHeight) / 2
+	markerLeft := (w - markerWidth) / 2
 	for y := 0; y < h; y++ {
-		rowColor := c
-		if y >= markerTop && y < markerTop+markerHeight {
-			rowColor = white
-		}
+		inWhite := y >= markerTop && y < markerTop+markerHeight
 		for x := 0; x < w; x++ {
-			img.SetRGBA(x, y, rowColor)
+			px := c
+			if inWhite {
+				px = white
+			} else if x >= markerLeft && x < markerLeft+markerWidth {
+				px = magenta
+			}
+			img.SetRGBA(x, y, px)
 		}
 	}
 	var buf bytes.Buffer
