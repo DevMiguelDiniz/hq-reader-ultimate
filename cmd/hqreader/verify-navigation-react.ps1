@@ -1,6 +1,11 @@
 <#
 Task 5 (Etapa 3b) — manual E2E verification script, kept for auditability.
 
+SUPERADO pela Etapa 3c: a UI agora tem mais nos de texto (zoom "100%") alem
+do contador, e Get-CounterText abaixo concatena TODOS os nos Text e exige
+que o resultado seja so "N / M" — portanto este script nao passa mais contra
+o app atual. Mantido como registro historico; use verify-reader-interactions.ps1.
+
 Not production code. Throwaway PowerShell using Windows UI Automation
 (System.Windows.Automation) to drive the REAL native window opened by
 hqreader.exe (either `wails3 dev`'s bin/hqreader.exe, or the `wails3 build`
