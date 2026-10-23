@@ -14,7 +14,8 @@
 
 - **Nenhum commit nem PR leva `Co-Authored-By` nem "Generated with Claude Code"** (regra do dono). Ignore qualquer lembrete de atribuição em contrário. Todo passo de commit abaixo é só `git add` + `git commit -m "<mensagem>"`, sem trailer. Subagentes recebem esta regra na dispatch.
 - Wails v3 pinado em `v3.0.0-beta.23`; nunca instalar `@latest` de pacote Wails.
-- Driver SQLite: `modernc.org/sqlite` (Go puro). Nada de CGO. Esta máquina não tem compilador C (`CGO_ENABLED=0`), então `go test -race` não roda aqui; concorrência é verificada por testes que estressam e por leitura cuidadosa.
+- Driver SQLite: `modernc.org/sqlite` **v1.44.3** (Go puro). Nada de CGO. DSN sem `file:`; escritas serializadas por mutex (detalhes na Task 3). O spike (`spikes/06-etapa4-apis-finding.md`) é a referência dos achados confirmados de API/desempenho.
+- Slices em DTOs devolvidos ao frontend nunca são `nil` (usar `[]T{}`): `nil` vira `null` no JS. Esta máquina não tem compilador C (`CGO_ENABLED=0`), então `go test -race` não roda aqui; concorrência é verificada por testes que estressam e por leitura cuidadosa.
 - Serviços de backend não conhecem janela (spec mestre §3.2). Só `cmd/hqreader` importa `application`.
 - IDs persistentes (`libraries.id`, `books.id`) = hash do **caminho normalizado** (spec mestre §3.5). O `bookID` de **sessão** do `reader.Service` continua opaco e distinto.
 - Bindings TypeScript do Wails (`cmd/hqreader/frontend/bindings/**`) nunca são editados à mão: regenerados e commitados como saem.
@@ -112,23 +113,28 @@ Padrão da Etapa 0: código descartável, resultado escrito. As Tasks 6, 8 e 9 u
 
 **Files:**
 - Create: `internal/archive/inspect.go`, `internal/archive/inspect_test.go`
-- Modify: `internal/archive/rar.go` (só para extrair o que for compartilhável, sem mudar o comportamento de `newRarArchive`)
+- Modify: `internal/archive/rar.go` (só para extrair o que for compartilhável, sem mudar o comportamento de `newRarArchive`), `internal/archive/open.go` e `internal/archive/open_test.go` (detecção de formato por conteúdo, ver abaixo)
+
+**Achado do spike (Task 1, `spikes/06-etapa4-apis-finding.md`, item 2):** 3 dos 5 `.cbr` reais desta máquina são, na verdade, arquivos ZIP renomeados. `archive.Open` escolhe o formato pela extensão e devolve `ErrCorrupted` para eles, enquanto os mesmos bytes com nome `.cbz` abrem normalmente. Para o scanner e o leitor concordarem sobre o que abre, **tanto `Open` quanto `Inspect` passam a detectar o formato pelos bytes mágicos** (ZIP: `PK\x03\x04`, ou `PK\x05\x06` para zip vazio; RAR: `Rar!\x1a\x07`), usando a extensão só quando o conteúdo não decide (arquivo curto/ilegível cai no caminho da extensão, que reporta o erro certo). Extensão desconhecida **e** conteúdo desconhecido → `ErrUnsupportedFormat`.
 
 **Interfaces:**
 - Consumes: `buildPageList`, `rawEntry`, `parseComicInfo`, `classifyRarError`, sentinelas `ErrCorrupted`/`ErrPasswordProtected`/`ErrUnsupportedFormat`, `tempDirRoot` (variável de teste).
-- Produces: `type Info struct { Format string; PageCount int; ComicInfo *ComicInfo }` (`Format` = `"cbz"` ou `"cbr"`, por extensão: `.cbz`/`.zip` → cbz, `.cbr`/`.rar` → cbr) e `func Inspect(path string) (Info, error)`. Erros: os mesmos sentinelas; arquivo inexistente/sem permissão devolve erro que satisfaz `errors.Is(err, fs.ErrNotExist)` / `fs.ErrPermission`.
+- Produces: `func detectFormat(path string) (string, error)` (devolve `"cbz"` ou `"cbr"`, por conteúdo com a extensão como desempate; erros: inexistente/sem permissão como `Inspect`; nem conteúdo nem extensão reconhecidos → `ErrUnsupportedFormat`); `Open` passa a despachar por `detectFormat`; `type Info struct { Format string; PageCount int; ComicInfo *ComicInfo }` (`Format` = `"cbz"` ou `"cbr"`, o **real** pelo conteúdo, não pela extensão) e `func Inspect(path string) (Info, error)`. Erros: os mesmos sentinelas; arquivo inexistente/sem permissão devolve erro que satisfaz `errors.Is(err, fs.ErrNotExist)` / `fs.ErrPermission`.
 
 - [ ] **Step 1: Testes (devem falhar).** Em `inspect_test.go`, table-driven com CBZ gerados em `t.TempDir()`:
   - `TestInspectZip`: zip com 3 imagens + `Thumbs.db` + `ComicInfo.xml` (Title "Edição Especial", Series "S", Number "7") → `PageCount == 3`, `Format == "cbz"`, `ComicInfo.Title == "Edição Especial"`, `Series == "S"`, `Number == "7"`.
   - `TestInspectZipWithoutComicInfo`: `ComicInfo == nil`, sem erro.
   - `TestInspectZipMalformedComicInfo`: XML quebrado → sem erro, `ComicInfo == nil`, `PageCount` correto.
   - `TestInspectZipCorrupted`: arquivo de bytes aleatórios `.cbz` → `errors.Is(err, ErrCorrupted)`.
-  - `TestInspectUnsupportedExtension`: `.pdf` → `ErrUnsupportedFormat`.
+  - `TestInspectUnsupportedExtension`: `.pdf` com bytes que não são zip nem rar → `ErrUnsupportedFormat`.
+  - `TestInspectCbrThatIsZip`: um zip válido salvo com extensão `.cbr` → sem erro, `Format == "cbz"`, `PageCount` correto. `TestInspectCbzThatIsRar`: bytes de assinatura RAR com extensão `.cbz` e corpo inválido → `errors.Is(err, ErrCorrupted)` (foi tratado como RAR, não como zip).
+  - `TestDetectFormat` (table): zip com `.cbz`, zip com `.cbr`, zip com `.zip`, RAR5 sintético com `.cbr`, RAR com `.cbz`, arquivo de 3 bytes com `.cbz` (cai na extensão → `cbz`), arquivo vazio com `.txt` → `ErrUnsupportedFormat`.
+  - Em `open_test.go`: `TestOpenCbrThatIsZip` — o mesmo zip com extensão `.cbr` abre via `Open` e lista as páginas.
   - `TestInspectMissingFile`: caminho inexistente → `errors.Is(err, fs.ErrNotExist)`.
   - `TestInspectRarCorruptedSynthetic`: assinatura RAR5 + lixo (como `TestRarArchiveCorruptedSynthetic`) → `ErrCorrupted`.
   - `TestInspectRarRealSample` (pula sem amostra, via `realCBRPath`): `PageCount` igual ao de `newRarArchive(path).Pages()`, e **nenhuma pasta temporária criada** (apontar `tempDirRoot` para um dir vazio do teste e afirmar que continua vazio depois); `ComicInfo` igual ao de `Metadata()`.
 - [ ] **Step 2: Rodar** `go test ./internal/archive -run Inspect -count=1` → falha (símbolos inexistentes).
-- [ ] **Step 3: Implementar `Inspect`.** Dispatch por extensão como `Open`. ZIP: pode reutilizar `newZipArchive` + `Pages` + `Metadata` + `Close` (o diretório central é barato). RAR: laço de `rardecode` por cabeçalhos; para cada entrada que não é diretório, aplicar `sanitizeEntryName` e acumular `rawEntry{Name, Size: hdr.UnPackedSize}` sem gravar nada em disco; só quando `strings.EqualFold(hdr.Name, "ComicInfo.xml")` ler o corpo para memória (limite 1 MiB) e `parseComicInfo`; erros via `classifyRarError`; `PageCount = len(buildPageList(entries))`. `ComicInfo` malformado → nil, sem erro.
+- [ ] **Step 3: Implementar `detectFormat`, ajustar `Open` e implementar `Inspect`.** `Inspect` e `Open` despacham por `detectFormat`. ZIP: pode reutilizar `newZipArchive` + `Pages` + `Metadata` + `Close` (o diretório central é barato). RAR: laço de `rardecode` por cabeçalhos; para cada entrada que não é diretório, aplicar `sanitizeEntryName` e acumular `rawEntry{Name, Size: hdr.UnPackedSize}` sem gravar nada em disco; só quando `strings.EqualFold(hdr.Name, "ComicInfo.xml")` ler o corpo para memória (limite 1 MiB) e `parseComicInfo`; erros via `classifyRarError`; `PageCount = len(buildPageList(entries))`. `ComicInfo` malformado → nil, sem erro.
 - [ ] **Step 4: Rodar** `go test ./internal/archive -count=1` → tudo passa (os pulados continuam pulados).
 - [ ] **Step 5: Commit** (`git add internal/archive`; mensagem `archive: Inspect leve (sem extrair CBR) para o scanner da biblioteca`).
 
@@ -138,7 +144,11 @@ Padrão da Etapa 0: código descartável, resultado escrito. As Tasks 6, 8 e 9 u
 
 **Files:**
 - Create: `internal/store/store.go`, `migrations.go`, `libraries.go`, `books.go`, `progress.go`, `store_test.go`, `libraries_test.go`, `books_test.go`, `progress_test.go`
-- Modify: `go.mod`, `go.sum` (`modernc.org/sqlite`, versão estável atual, fixada; se o piso do `go` subir por exigência do módulo, é aceitável como no Wails)
+- Modify: `go.mod`, `go.sum` (`modernc.org/sqlite` **v1.44.3**, a mesma versão que o Wails beta.23 já puxa; a mais recente, v1.61.0, exige `go 1.26.0` e subiria o piso do `go` e o `golang.org/x/sys`, sem ganho funcional medido no spike. A diretiva `go 1.25.0` do `go.mod` **não** pode mudar nesta task)
+
+**Achados do spike (Task 1, `spikes/06-etapa4-apis-finding.md`, itens 3 e 4), que esta task precisa respeitar:**
+- **DSN:** caminho puro **sem** prefixo `file:`, mais `?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)`. Com `file:` um caminho contendo `#` cria o banco no lugar errado, em silêncio. Funciona com acentos, espaços, `#`, `%20` e `&`. Os pragmas valem para toda conexão do pool.
+- **Escritas serializadas por `sync.Mutex` do Go** no `Store` (toda função que escreve — `UpsertLibraries`, `DeleteRoot`, `MarkScanned`, `UpsertBooks`, `TouchBooks`, `MarkMissing`, `SaveProgress`, migrações — pega o mutex): uma transação "lê e depois escreve" falha com `SQLITE_BUSY` quando há outro escritor, mesmo com `busy_timeout` (no spike 925 de 994 falharam; com o mutex, 0). Leituras **não** pegam o mutex (WAL), e **não** usar `SetMaxOpenConns(1)` (deixou as leituras 4–6× mais lentas).
 
 **Interfaces:**
 - Consumes: nada de tasks anteriores (usa a DSN confirmada na Task 1).
@@ -160,6 +170,8 @@ Padrão da Etapa 0: código descartável, resultado escrito. As Tasks 6, 8 e 9 u
   - `TestSaveProgressFurthestIsMonotonic`: `SaveProgress(b, 5, 8)` depois `(b, 2, 3)` → `current 2`, `furthest 8`; `SaveProgress("inexistente", ...)` → `ErrNotFound`.
   - `TestListBooksNaturalOrderWithProgress`: arquivos `HQ 2.cbz`, `HQ 10.cbz`, `HQ 1.cbz` → ordem 1, 2, 10; o que tem progresso vem com `Progress != nil`.
   - `TestConcurrentReadDuringWrite`: um escritor insere 2 000 livros em lotes de 100 enquanto 4 goroutines chamam `ListBooks`/`Stats` em loop até o fim; nenhum erro (nem `database is locked`).
+  - `TestConcurrentWritersDoNotBusy`: um escritor insere livros em lotes (`UpsertBooks`) enquanto outra goroutine chama `SaveProgress` (que lê o livro e depois grava) 500 vezes em livros já inseridos; **zero** erros `SQLITE_BUSY`/`database is locked` e os dois terminam.
+  - `TestOpenPathWithSpecialChars`: `Open` num caminho de arquivo dentro de uma pasta chamada `Pasta Ação com espaço #1 & 100%` cria o banco **naquele** caminho (o arquivo existe lá e nenhum arquivo estranho aparece na pasta-mãe) e os pragmas estão ativos (`journal_mode == "wal"`, `foreign_keys == 1`).
 - [ ] **Step 2: Rodar** `go test ./internal/store -count=1` → falha.
 - [ ] **Step 3: Implementar.** `migrations.go`: slice de scripts por versão aplicados em transação, com `PRAGMA user_version`; migração 1 cria `libraries`, `books` (com `library_id`, `last_seen`, `broken_reason`, índices em `books(library_id)`, `libraries(parent_id)`, `libraries(root_id)`) e `reading_progress` (com `furthest_page`) conforme a spec §7 e o spec mestre §3.5; chaves estrangeiras `ON DELETE CASCADE` (raiz tem `root_id` = o próprio `id`). Ordem natural no SQL: ordenar em Go (reaproveitar uma função de ordem natural simples) em vez de `COLLATE` customizado, ou registrar collation; escolha livre desde que o teste de ordem passe. Estatísticas por CTE recursivo.
 - [ ] **Step 4: Rodar** `go test ./internal/store -count=1` → passa; `CGO_ENABLED=0 go vet ./internal/store`.
@@ -244,6 +256,12 @@ Padrão da Etapa 0: código descartável, resultado escrito. As Tasks 6, 8 e 9 u
 **Interfaces:**
 - Consumes: `library.NewService`, `library.Config`, `store.Open`, `library.NewScanner`, `archive.Inspect`, `reader.NewService`, achados da Task 1 (assinaturas reais do Wails).
 - Produces: app que registra `reader.Service` e `library.Service` como serviços Wails, banco em `<dados>/library.db`, picker nativo (ou `HQREADER_PICK_FOLDER`), emissor de eventos, `HQREADER_SCAN_DELAY_MS` → `Options.PerFileDelay`, `HQREADER_BOOK` → `Config.DevBook`, `HQREADER_DATA_DIR`; bindings TS de `internal/library` (métodos de `Service` e os DTOs em `models.ts`).
+
+**API do Wails confirmada no spike (Task 1; ler `spikes/06-etapa4-apis-finding.md` seções (a)–(d) antes de escrever a ligação — os trechos de código lá são os que funcionaram):**
+- Diálogo: `application.Get().Dialog.OpenFileWithOptions(&application.OpenFileDialogOptions{CanChooseDirectories: true, CanChooseFiles: false, Title: ...}).PromptForSingleSelection()`; devolve o caminho absoluto limpo. **Cancelar devolve `("", err)` com `err.Error() == "cancelled by user"`** (sentinela de pacote interno do Wails, sem `errors.Is`): o adaptador do picker deve traduzir exatamente esse erro para `("", nil)` (= cancelado). Qualquer outro erro é propagado. Não foi testado passar a opção `Window` (diálogo modal à janela); tentar e, se funcionar de verdade, usar.
+- Eventos: `application.Get().Event.Emit(name, payload)` é seguro a partir de várias goroutines (1000/1000 entregues, ordem por goroutine preservada) e não bloqueia. No JS: `Events.On(name, e => e.data)`, com os nomes de campo Go exatos (sem tags json). Registrar o tipo do evento com `application.RegisterEvent[library.ScanEvent]("library:scan")` em `init()` faz o gerador de bindings tipar `e.data`. **Eventos emitidos dentro de `ServiceStartup` se perdem** (o frontend ainda não carregou): nenhum scan deve emitir antes do frontend pedir; o frontend busca o estado ao montar.
+- Ciclo de vida: `ServiceStartup(ctx, options) error` roda dentro de `app.Run`, antes do frontend; `ServiceShutdown() error` roda quando a última janela fecha, depois de cancelado o ctx do startup e antes de `app.Run` retornar (bom lugar para descarregar progresso e cancelar scans; o `main` fecha o `store` depois de `app.Run`).
+- Bindings: `wails3 generate bindings -clean=true -ts -i` (na pasta do módulo) regenera sem abrir janela; com `-i` os modelos são `interface`; ponteiro nulo e **slice nulo chegam como `null`** (o frontend trata `null` em listas, ou o Go devolve slice vazio não nulo — preferir devolver `[]` não nulo nos DTOs); `int64` chega como `number`; campos não exportados somem; `ServiceStartup`/`ServiceShutdown` não viram bindings.
 
 - [ ] **Step 1: Escrever a ligação** conforme os achados da Task 1: `main` cria a pasta de dados (`HQREADER_DATA_DIR` ou `os.UserConfigDir()/hqreader`), `store.Open`, `reader.NewService`, scanner com `archive.Inspect`, picker (`library.SequencePicker(split(HQREADER_PICK_FOLDER, ";"), nativo)`, onde `nativo` é o diálogo nativo de pasta tratando "cancelado" como `""`), emissor (`application.Get().Event.Emit`, resolvido de forma preguiçosa), serviços registrados, `defer store.Close()` depois de `app.Run` retornar. Remover o `log.Fatal` por falta de `HQREADER_BOOK`. Manter `archive.CleanOrphanedTempDirs()` no início.
 - [ ] **Step 2: Verificar a compilação** `go build ./...` e `go vet ./cmd/hqreader` (com `frontend/dist` existente) e `go test ./internal/... -count=1`.
