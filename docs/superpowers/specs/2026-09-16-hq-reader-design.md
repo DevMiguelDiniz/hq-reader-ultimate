@@ -19,7 +19,7 @@ Mobile fora de escopo.
 | Resize de thumbnail | `golang.org/x/image/draw` (CatmullRom) |
 | Metadados | `encoding/xml` (stdlib), `ComicInfo.xml` |
 | Ordenação natural | implementação própria ou `maruel/natural` |
-| Persistência | SQLite via `mattn/go-sqlite3` (CGO — já exigido pelo Wails no macOS/Linux; ver nota de risco em §4 sobre CGO no Windows) |
+| Persistência | SQLite via `modernc.org/sqlite` (Go puro, sem CGO; decisão do dono em 2026-10-23, substitui `mattn/go-sqlite3` — ver nota de risco em §4 e o design da Etapa 4) |
 | Frontend | Vite + React + TypeScript, Tailwind, shadcn/ui, Zustand, Motion |
 
 Go foi escolhido sobre Rust por causa do RAR: em Go, `rardecode` resolve CBR sem
@@ -174,7 +174,7 @@ Um coordinator por livro **aberto** (não por livro da biblioteca) — com a
 Etapa 7, pode haver dois coordinators simultâneos, sem estado compartilhado
 entre si.
 
-### 3.5 Modelo de dados (SQLite, `mattn/go-sqlite3`, `journal_mode=WAL`)
+### 3.5 Modelo de dados (SQLite, `modernc.org/sqlite`, `journal_mode=WAL`)
 
 ```sql
 CREATE TABLE books (
@@ -279,7 +279,7 @@ Regras de cache de página (não mudou do briefing original):
 
 | Item | Decisão | Justificativa |
 |---|---|---|
-| Driver SQLite | `mattn/go-sqlite3` | Wails já exige CGO no macOS/Linux; portabilidade pure-Go não paga o custo de performance |
+| Driver SQLite | `modernc.org/sqlite` (revisado em 2026-10-23; antes: `mattn/go-sqlite3`) | Go puro: dispensa compilador C na máquina de desenvolvimento (que não tem) e simplifica compilação cruzada e empacotamento (Etapa 8). Custo aceito: um pouco mais lento e binário maior, irrelevantes numa biblioteca local de quadrinhos |
 | Modo contínuo/webtoon | Fora da v1, planejado (schema já suporta via `book_settings.layout`) | Puramente front-end sobre a mesma rota HTTP; sem custo de retrofit |
 | Modo mangá (RTL) | Fora da v1, planejado (schema já suporta via `book_settings.direction`) | Mesma lógica do item acima |
 | Agrupamento de biblioteca | Coleções criadas manualmente pelo usuário (não auto-detecção de série) | Requisito explícito do usuário |
@@ -291,6 +291,12 @@ Regras de cache de página (não mudou do briefing original):
 | Formatos de imagem suportados na v1 | JPEG, PNG, WebP (decode nativo do WebView para página cheia; `x/image` para thumbnail) | AVIF/JXL sem encoder Go viável para thumbnail — mostrar placeholder de erro por página em vez de tentar suportar |
 | Watcher de biblioteca | Nenhum na v1 — rescan manual | `fsnotify` recursivo em biblioteca grande tende a dar mais problema que resolve |
 
+> **RESOLVIDA em 2026-10-23:** o dono escolheu `modernc.org/sqlite` (Go puro,
+> sem CGO), registrado na tabela acima. O texto abaixo fica como registro
+> histórico da análise. (Correção ao spike: `crawshaw/sqlite` não é Go puro,
+> é um wrapper do SQLite em C; `glebarez/sqlite` é só uma camada sobre o
+> `modernc`.)
+>
 > **Nota de risco aberta (Etapa 0, item 5 — não resolvida por esta validação;
 > requer decisão consciente do dono do projeto antes da Etapa 4):** o spike
 > `spikes/05-windows-cgo-finding.md` confirmou que o **Wails v3 em si não
