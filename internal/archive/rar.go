@@ -30,6 +30,20 @@ func sanitizeEntryName(name string) (string, error) {
 	return clean, nil
 }
 
+// openRarReader abre o RAR e traduz o erro para o vocabulário do pacote:
+// ausente/sem permissão preserva fs.ErrNotExist/fs.ErrPermission; o resto
+// passa por classifyRarError. Compartilhado por newRarArchive e Inspect.
+func openRarReader(path string) (*rardecode.ReadCloser, error) {
+	r, err := rardecode.OpenReader(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+			return nil, fmt.Errorf("archive: nao foi possivel abrir %s: %w", path, err)
+		}
+		return nil, classifyRarError(err)
+	}
+	return r, nil
+}
+
 func newRarArchive(path string) (Archive, error) {
 	root := tempDirRoot()
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -40,13 +54,10 @@ func newRarArchive(path string) (Archive, error) {
 		return nil, fmt.Errorf("archive: nao foi possivel criar diretorio temporario: %w", ErrCorrupted)
 	}
 
-	r, err := rardecode.OpenReader(path)
+	r, err := openRarReader(path)
 	if err != nil {
 		os.RemoveAll(tempDir)
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
-			return nil, fmt.Errorf("archive: nao foi possivel abrir %s: %w", path, err)
-		}
-		return nil, classifyRarError(err)
+		return nil, err
 	}
 	defer r.Close()
 

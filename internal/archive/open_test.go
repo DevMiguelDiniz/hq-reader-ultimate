@@ -24,6 +24,19 @@ func TestOpenDispatchesCBZ(t *testing.T) {
 	}
 }
 
+func TestOpenCbrThatIsZip(t *testing.T) {
+	src := writeTestZip(t, map[string][]byte{"page1.jpg": tinyJPEG, "page2.jpg": tinyJPEG})
+	path := copyAs(t, src, "disfarcado.cbr")
+	a, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer a.Close()
+	if len(a.Pages()) != 2 {
+		t.Errorf("got %d pages, want 2", len(a.Pages()))
+	}
+}
+
 func TestOpenDispatchesCBR(t *testing.T) {
 	path := realCBRPath(t)
 	a, err := Open(path)
