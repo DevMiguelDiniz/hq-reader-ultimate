@@ -29,8 +29,8 @@ Para quem abrir uma sessão nova para executar **uma task** do plano. Leia tudo 
 |---|---|---|
 | 1 | Spike da API do Wails, SQLite e CBR | **feita** (`6870573`) |
 | 2 | `archive.Inspect` + formato por conteúdo | **feita** (`0217442`) |
-| 3 | `internal/store` (SQLite, migrações) | **implementada** (`878eba3`); em revisão independente no momento desta nota. Antes de começar a Task 4, confira no diário se há `Task 3: complete` |
-| 4 | `internal/library`: identidade de caminho e scanner | 3 |
+| 3 | `internal/store` (SQLite, migrações) | **feita** (`878eba3` + correção `d544738`, revisão limpa) |
+| 4 | `internal/library`: identidade de caminho e scanner | 3 · **é a próxima**; parte do commit `d544738` (ou posterior) da branch |
 | 5 | `LibraryService` (bibliotecas, abrir livro, progresso) | 4 |
 | 6 | Ligação no shell Wails, diálogo, eventos, bindings | 5 |
 | 7 | Frontend: tokens Papel, tema, barra superior, visões | 6 |
@@ -58,7 +58,8 @@ Cada task parte do **último commit** da branch `worktree-etapa-4-biblioteca`. S
 - **R4:** limites aceitos do spike: CBR sólido não medido; caminhos longos só vistos com `LongPathsEnabled=1`; opção `Window` do diálogo não testada (a Task 6 tenta).
 - Task 4: `IsWithin` precisa acrescentar `/` (raiz de unidade normaliza para `c:`); **não** normalizar Unicode (NFC e NFD são pastas diferentes no NTFS); prefixo `\\?\` mudaria o id; caminho relativo resolve contra o diretório atual.
 - **API do store (Task 3) que as Tasks 4 e 5 consomem:** `Fingerprints(ctx, rootID)` devolve mapa **por id do livro** (o scanner procura por `id = hash(caminho)`); `MarkMissing(ctx, rootID, token)` devolve quantos foram marcados **naquela chamada**; `ListBooks(libraryID)` devolve só os livros **diretamente** naquela biblioteca, em ordem natural pelo nome do arquivo; `MarkScanned` devolve `ErrNotFound` se a raiz sumiu (o scanner e o serviço precisam tolerar remoção no meio do scan); `DeleteRoot` é idempotente; toda escrita espera um mutex que **não** respeita o cancelamento do contexto (um scan cancelado pode esperar um lote em curso terminar).
-- Task 5: lotes do scan e gravação de progresso se intercalam: tudo passa pelo mutex do store.
+- **Contrato do token de scan (Task 4):** `MarkMissing(root, token)` marca `last_seen < token`. O token é fixado **antes** do scan; todo `Book.LastSeen` gravado por `UpsertBooks` e todo `TouchBooks(ids, seen)` precisa ser **≥ token** (esquecer `LastSeen = 0` marca tudo como ausente). Nunca chamar `MarkMissing` nem `MarkScanned` depois de um scan cancelado ou interrompido. Lotes de `UpsertBooks`/`TouchBooks` de no máximo 500. `books.path` e `libraries.path` são `UNIQUE`: colisão de caminho com outro id aborta o lote inteiro. `UpsertLibraries` valida a árvore (`ErrInvalidTree`: ciclo, pai inexistente, `RootID` incoerente; raiz tem `RootID == ID`; pais antes dos filhos) e cada re-upsert custa algumas consultas por pasta.
+- Task 5: lotes do scan e gravação de progresso se intercalam: tudo passa pelo mutex do store. Mapear `ErrInvalidTree` para erro de usuário se aparecer; cancelar e **esperar** o scan antes de `DeleteRoot`; limitar e serializar o `SaveProgress` por livro (o store não serializa por livro).
 - Task 8: campos de DTO e de evento mantêm a caixa do Go (`RootID`, `Kind`), `null` em listas, ids são strings, o frontend busca o estado ao montar.
 - **Recomendado antes do merge (Task 2, adiado):** o caminho que lê o `ComicInfo.xml` de um CBR em memória, a regra "só na raiz" e as duas ramificações de criptografia não têm teste commitado, só validação manual do revisor. Um construtor de RAR4 de ~40 linhas dentro do teste cobriria isso.
 
