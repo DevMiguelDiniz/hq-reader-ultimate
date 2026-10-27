@@ -7,10 +7,14 @@ import (
 )
 
 // SaveProgress grava a página atual do livro e avança a página mais distante
-// (furthest_page = max(existente, furthest), nunca diminui). Livro
-// inexistente devolve ErrNotFound. É um "lê e depois escreve", por isso roda
-// sob o mutex de escrita do Store.
+// (furthest_page = max(existente, furthest), nunca diminui). As entradas são
+// normalizadas: current e furthest negativos viram 0 e furthest nunca fica
+// abaixo de current (a página atual conta como já vista). Livro inexistente
+// devolve ErrNotFound. É um "lê e depois escreve", por isso roda sob o mutex
+// de escrita do Store.
 func (s *Store) SaveProgress(ctx context.Context, bookID string, current, furthest int, at int64) error {
+	current = max(current, 0)
+	furthest = max(furthest, current)
 	return s.write(ctx, func(tx *sql.Tx) error {
 		var one int
 		err := tx.QueryRowContext(ctx, "SELECT 1 FROM books WHERE id = ?", bookID).Scan(&one)

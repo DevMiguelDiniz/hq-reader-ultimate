@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"sort"
 )
 
@@ -39,10 +40,79 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-// UpsertLibraries grava as bibliotecas numa transação. Os pais precisam vir
-// antes dos filhos na lista (a chave estrangeira é verificada na hora). Um
-// reupsert atualiza nome, caminho, pai e raiz, mas nunca added_at nem
-// scanned_at.
+// validateLibrary garante, dentro da transação de UpsertLibraries (portanto
+// sob o mutex de escrita e vendo as linhas anteriores do mesmo lote), que
+// gravar l mantém a árvore coerente:
+//   - raiz (ParentID == ""): RootID == ID;
+//   - filha: o pai existe, não é ela mesma e tem o mesmo RootID;
+//   - uma biblioteca já existente não troca de raiz;
+//   - mover uma biblioteca existente para baixo de um descendente seu (ciclo)
+//     é rejeitado.
+//
+// Toda violação devolve um erro que satisfaz errors.Is(err, ErrInvalidTree).
+func validateLibrary(ctx context.Context, tx *sql.Tx, l Library) error {
+	invalid := func(format string, args ...any) error {
+		return fmt.Errorf("%w: biblioteca %q: %s", ErrInvalidTree, l.ID, fmt.Sprintf(format, args...))
+	}
+	if l.ParentID == "" {
+		if l.RootID != l.ID {
+			return invalid("raiz com RootID %q diferente do próprio id", l.RootID)
+		}
+	} else {
+		if l.ParentID == l.ID {
+			return invalid("é pai de si mesma")
+		}
+		var parentRoot string
+		err := tx.QueryRowContext(ctx, "SELECT root_id FROM libraries WHERE id = ?", l.ParentID).Scan(&parentRoot)
+		if errors.Is(err, sql.ErrNoRows) {
+			return invalid("pai %q não existe", l.ParentID)
+		}
+		if err != nil {
+			return err
+		}
+		if parentRoot != l.RootID {
+			return invalid("RootID %q difere do RootID %q do pai", l.RootID, parentRoot)
+		}
+	}
+
+	var curRoot string
+	err := tx.QueryRowContext(ctx, "SELECT root_id FROM libraries WHERE id = ?", l.ID).Scan(&curRoot)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil // linha nova: ninguém a tem como pai, então não pode fechar ciclo
+	}
+	if err != nil {
+		return err
+	}
+	if curRoot != l.RootID {
+		return invalid("não pode mudar de raiz (%q -> %q)", curRoot, l.RootID)
+	}
+	// Sobe a cadeia de pais a partir do novo pai: se passar por l.ID, é ciclo.
+	// O limite de passos também cobre um ciclo já existente fora de l.
+	cur := l.ParentID
+	for depth := 0; cur != "" && depth < maxTreeDepth; depth++ {
+		if cur == l.ID {
+			return invalid("o novo pai %q é descendente dela (ciclo)", l.ParentID)
+		}
+		var next sql.NullString
+		if err := tx.QueryRowContext(ctx, "SELECT parent_id FROM libraries WHERE id = ?", cur).Scan(&next); err != nil {
+			return err
+		}
+		cur = next.String // "" quando NULL: chegou à raiz
+		if cur == "" {
+			return nil
+		}
+	}
+	if cur != "" {
+		return invalid("cadeia de pais com mais de %d níveis", maxTreeDepth)
+	}
+	return nil
+}
+
+// UpsertLibraries grava as bibliotecas numa transação (tudo ou nada). Os pais
+// precisam vir antes dos filhos na lista. Cada uma é validada por
+// validateLibrary (ciclo, pai próprio ou inexistente, raiz incoerente ->
+// ErrInvalidTree). Um reupsert atualiza nome, caminho, pai e raiz, mas nunca
+// added_at nem scanned_at.
 func (s *Store) UpsertLibraries(ctx context.Context, libs []Library) error {
 	if len(libs) == 0 {
 		return nil
@@ -59,6 +129,9 @@ ON CONFLICT(id) DO UPDATE SET
 		}
 		defer stmt.Close()
 		for _, l := range libs {
+			if err := validateLibrary(ctx, tx, l); err != nil {
+				return err
+			}
 			if _, err := stmt.ExecContext(ctx, l.ID, l.Path, l.Name, nullIfEmpty(l.ParentID), l.RootID, l.AddedAt); err != nil {
 				return err
 			}
@@ -133,17 +206,20 @@ func (s *Store) ListChildren(ctx context.Context, parentID string) ([]Library, e
 }
 
 // Ancestors devolve o caminho da raiz até a própria biblioteca (raiz primeiro,
-// id por último). Id desconhecido devolve lista vazia.
+// id por último). Id desconhecido devolve lista vazia. A subida é limitada a
+// maxTreeDepth níveis, para terminar mesmo numa árvore envenenada por um ciclo
+// (o resultado, nesse caso, é truncado).
 func (s *Store) Ancestors(ctx context.Context, id string) ([]Library, error) {
 	return s.queryLibraries(ctx, `
 WITH RECURSIVE up(id, path, name, parent_id, root_id, added_at, scanned_at, depth) AS (
-  SELECT id, path, name, parent_id, root_id, added_at, scanned_at, 0 FROM libraries WHERE id = ?
+  SELECT id, path, name, parent_id, root_id, added_at, scanned_at, 0 FROM libraries WHERE id = ?1
   UNION ALL
   SELECT l.id, l.path, l.name, l.parent_id, l.root_id, l.added_at, l.scanned_at, up.depth + 1
   FROM libraries l JOIN up ON l.id = up.parent_id
+  WHERE up.depth < ?2
 )
 SELECT id, path, name, COALESCE(parent_id, ''), root_id, added_at, scanned_at
-FROM up ORDER BY depth DESC`, id)
+FROM up ORDER BY depth DESC`, id, maxTreeDepth)
 }
 
 // DeleteRoot apaga a raiz e, em cascata, suas sub-bibliotecas, livros e
@@ -174,13 +250,15 @@ func (s *Store) MarkScanned(ctx context.Context, rootID string, at int64) error 
 }
 
 // Stats conta, na subárvore de libraryID, os livros não ausentes e, entre os
-// filhos diretos, as pastas. Biblioteca desconhecida devolve zeros.
+// filhos diretos, as pastas. Biblioteca desconhecida devolve zeros. O CTE usa
+// UNION (não UNION ALL) sobre ids, então um id já visitado não reentra e a
+// consulta termina mesmo numa árvore envenenada por um ciclo.
 func (s *Store) Stats(ctx context.Context, libraryID string) (Stats, error) {
 	var st Stats
 	err := s.db.QueryRowContext(ctx, `
 WITH RECURSIVE sub(id) AS (
   SELECT id FROM libraries WHERE id = ?1
-  UNION ALL
+  UNION
   SELECT l.id FROM libraries l JOIN sub ON l.parent_id = sub.id
 )
 SELECT

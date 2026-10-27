@@ -33,9 +33,18 @@ var (
 	// ErrSchemaTooNew indica um banco criado por uma versão mais nova do app.
 	// O arquivo não é alterado.
 	ErrSchemaTooNew = errors.New("store: o banco de dados foi criado por uma versão mais nova do aplicativo")
+	// ErrInvalidTree indica uma biblioteca que deixaria a árvore inconsistente
+	// (ciclo, pai inexistente/próprio, raiz incoerente). Nada é gravado.
+	ErrInvalidTree = errors.New("store: árvore de bibliotecas inválida")
 	// ErrNotFound indica que o registro pedido não existe.
 	ErrNotFound = errors.New("store: não encontrado")
 )
+
+// maxTreeDepth limita a profundidade percorrida em consultas e validações
+// recursivas da árvore de bibliotecas. Uma árvore de pastas real fica muito
+// abaixo disso; o limite só existe para que um ciclo (banco editado à mão ou
+// bug futuro) nunca faça uma consulta girar para sempre.
+const maxTreeDepth = 256
 
 // pragmas valem para toda conexão aberta pelo pool (o driver os aplica ao
 // abrir cada conexão).
